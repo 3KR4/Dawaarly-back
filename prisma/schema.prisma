@@ -1,12 +1,10 @@
 generator client {
   provider = "prisma-client-js"
 }
-
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
-
 model SubUser {
   id            Int      @id @default(autoincrement())
   full_name     String
@@ -33,30 +31,192 @@ model SubUser {
   bookings  Booking[]
   created_at    DateTime @default(now())
 }
-
-model DVacation {
-  table_id     Int      @id @default(autoincrement())
-  title        String
-  description  String
-  rent_amount  Float
-  active       Boolean  @default(true)
-  approved     Boolean  @default(false)
-  subuser_id   Int
-  created_at   DateTime @default(now())
-
-  user      SubUser  @relation(fields: [subuser_id], references: [id])
-  bookings  Booking[]
+enum AdStatus {
+  PENDING
+  ACTIVE
+  REJECTED
+  SOLD
+  BOOKED
+  DISABLED
 }
+model Country {
+  id            Int            @id @default(autoincrement())
+  name          String
+  governorates  Governorate[]
+}
+model Governorate {
+  id         Int      @id @default(autoincrement())
+  name       String
+  country_id Int
+  country    Country  @relation(fields: [country_id], references: [id])
+  cities     City[]
 
-model Booking {
-  id        Int      @id @default(autoincrement())
-  ad_id     Int
-  user_id   Int
-  from_date DateTime
-  to_date   DateTime
-  status    String   @default("pending")
+  @@index([country_id])
+}
+model City {
+  id              Int          @id @default(autoincrement())
+  name            String
+  governorate_id  Int
+  governorate     Governorate  @relation(fields: [governorate_id], references: [id])
+  areas           Area[]
+
+  @@index([governorate_id])
+}
+model Area {
+  id       Int     @id @default(autoincrement())
+  name     String
+  city_id  Int
+  city     City    @relation(fields: [city_id], references: [id])
+  compounds Compound[]
+
+  @@index([city_id])
+}
+model Compound {
+  id       Int   @id @default(autoincrement())
+  name     String
+  area_id  Int
+  area     Area  @relation(fields: [area_id], references: [id])
+
+  @@index([area_id])
+}
+model Category {
+  id            Int           @id @default(autoincrement())
+  name          String        @unique
+  subCategories SubCategory[]
+  ads           D_Vacation[]
+}
+model SubCategory {
+  id         Int         @id @default(autoincrement())
+  name       String
+  category_id Int
+  category   Category    @relation(fields: [category_id], references: [id])
+  ads        D_Vacation[]
+}
+model D_Vacation {
+  id                Int        @id @default(autoincrement())
+  ad_id             String     @unique
+  status            AdStatus   @default(PENDING)
+  featured_priority Int        @default(0)
+  approved_at       DateTime?
+
+  subuser_id        Int?
+  admin_id          Int?
+
+  title             String     @db.VarChar(100)
+  description       String
+
+  category          String     @db.VarChar(20)
+  subcategory       String     @db.VarChar(20)
+  subcategory_star  Int?
+
+  display_contact          Boolean @default(true)
+  display_phone            Boolean @default(true)
+  display_whatsapp         Boolean @default(true)
+  display_dawaarly_contact Boolean @default(false)
+
+  rent_amount          Decimal? @db.Decimal(12,2)
+  rent_currency        String?
+  rent_frequency       String?
+  deposit_amount       Decimal? @db.Decimal(12,2)
+  min_rent_period      Int?
+  min_rent_period_unit String?
+  available_from       DateTime?
+  available_to         DateTime?
+
+  country_id      Int
+  governorate_id  Int
+  city_id         Int
+  area_id         Int?
+  compound_id     Int?
+
+  bedrooms        Int?
+  bathrooms       Int?
+  level           Int?
+
+  adult_no_max    Int?
+  child_no_max    Int?
+
+  am_seeview        Boolean @default(false)
+  am_pool           Boolean @default(false)
+  am_balcony        Boolean @default(false)
+  am_private_garden Boolean @default(false)
+  am_kitchen        Boolean @default(false)
+  am_ac             Boolean @default(false)
+  am_heating        Boolean @default(false)
+  am_elevator       Boolean @default(false)
+  am_gym            Boolean @default(false)
+
+  tags             String[]
+
+  views_count      Int @default(0)
+  reach_count      Int @default(0)
+  favorites_count  Int @default(0)
+
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
+
+  images      AdImage[]
+  rejections  AdRejection[]
+  favorites   AdFavorite[]
+  views       AdView[]
+
+  @@index([status])
+  @@index([city_id])
+  @@index([governorate_id])
+  @@index([area_id])
+  @@index([featured_priority])
+  @@index([rent_amount])
+}
+model AdRejection {
+  id         Int @id @default(autoincrement())
+  ad_id      Int
+  admin_id   Int
+  reason     String
   created_at DateTime @default(now())
 
-  ad    DVacation @relation(fields: [ad_id], references: [table_id])
-  user  SubUser   @relation(fields: [user_id], references: [id])
+  ad D_Vacation @relation(fields: [ad_id], references: [id], onDelete: Cascade)
+}
+model AdFavorite {
+  id      Int @id @default(autoincrement())
+  ad_id   Int
+  user_id Int
+
+  ad D_Vacation @relation(fields: [ad_id], references: [id], onDelete: Cascade)
+
+  @@unique([ad_id, user_id])
+}
+model AdView {
+  id         Int @id @default(autoincrement())
+  ad_id      Int
+  ip_address String?
+  user_id    Int?
+  created_at DateTime @default(now())
+
+  ad D_Vacation @relation(fields: [ad_id], references: [id], onDelete: Cascade)
+
+  @@index([ad_id])
+}
+model Booking {
+  id           Int       @id @default(autoincrement())
+  ad_id        Int
+  user_id      Int
+  status       BookingStatus @default(PENDING)
+  from_date    DateTime
+  to_date      DateTime
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+
+  ad   D_Vacation @relation(fields: [ad_id], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([user_id])
+  @@index([ad_id])
+}
+
+enum BookingStatus {
+  PENDING
+  BOOKED
+  CLIENT_ARRIVED
+  CLIENT_LEFT
+  CANCELLED
 }
