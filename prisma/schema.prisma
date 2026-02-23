@@ -1,0 +1,62 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model SubUser {
+  id            Int      @id @default(autoincrement())
+  full_name     String
+  email         String   @unique
+  phone         String   @unique
+  password      String
+  birth_date          DateTime?
+  gender              String?
+  user_type     String   @default("user")  // user / subscriber / admin
+  roles         String[] @default([])      // example: ["manage_users", "approve_ads", "view_reports"]
+  is_super_admin Boolean @default(false)   // علامة الـ Super Admin
+  tiktok_link         String?
+  facebook_link       String?
+  user_verified Boolean  @default(false)
+  email_verified      Boolean  @default(false)
+  phone_verified      Boolean  @default(false)
+  subscription_ads_limit Int?  // null for normal users, number for subscription users
+  active_ads_count       Int    @default(0)
+  last_otp_sent_at         DateTime?
+  verification_code      String?
+  verification_expiry    DateTime?
+  admin_comment       String?
+  ads       DVacation[]
+  bookings  Booking[]
+  created_at    DateTime @default(now())
+}
+
+model DVacation {
+  table_id     Int      @id @default(autoincrement())
+  title        String
+  description  String
+  rent_amount  Float
+  active       Boolean  @default(true)
+  approved     Boolean  @default(false)
+  subuser_id   Int
+  created_at   DateTime @default(now())
+
+  user      SubUser  @relation(fields: [subuser_id], references: [id])
+  bookings  Booking[]
+}
+
+model Booking {
+  id        Int      @id @default(autoincrement())
+  ad_id     Int
+  user_id   Int
+  from_date DateTime
+  to_date   DateTime
+  status    String   @default("pending")
+  created_at DateTime @default(now())
+
+  ad    DVacation @relation(fields: [ad_id], references: [table_id])
+  user  SubUser   @relation(fields: [user_id], references: [id])
+}
