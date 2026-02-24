@@ -45,11 +45,11 @@ exports.register = async (req, res) => {
     if (!full_name || !email || !password || !phone)
       return res.status(400).json({ message: "Missing required fields" });
 
-    const existingEmail = await prisma.subUser.findUnique({ where: { email } });
+    const existingEmail = await prisma.Users.findUnique({ where: { email } });
     if (existingEmail)
       return res.status(400).json({ message: "Email already exists" });
 
-    const existingPhone = await prisma.subUser.findUnique({ where: { phone } });
+    const existingPhone = await prisma.Users.findUnique({ where: { phone } });
     if (existingPhone)
       return res.status(400).json({ message: "Phone already exists" });
 
@@ -58,7 +58,7 @@ exports.register = async (req, res) => {
       100000 + Math.random() * 900000,
     ).toString();
 
-    const user = await prisma.subUser.create({
+    const user = await prisma.Users.create({
       data: {
         full_name,
         email,
@@ -111,7 +111,7 @@ exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    const user = await prisma.subUser.findUnique({ where: { email } });
+    const user = await prisma.Users.findUnique({ where: { email } });
     if (!user) return res.status(404).json({ message: "User not found" });
 
     const isMatch = await bcrypt.compare(password, user.password);
@@ -124,7 +124,7 @@ exports.login = async (req, res) => {
       ).toString();
       const expiry = new Date(Date.now() + 10 * 60 * 1000);
 
-      await prisma.subUser.update({
+      await prisma.Users.update({
         where: { email },
         data: {
           verification_code: verificationCode,
@@ -163,14 +163,14 @@ exports.login = async (req, res) => {
 exports.verifyEmail = async (req, res) => {
   const { email, code } = req.body;
 
-  const user = await prisma.subUser.findUnique({ where: { email } });
+  const user = await prisma.Users.findUnique({ where: { email } });
 
   if (!user) return res.status(404).json({ message: "User not found" });
 
   if (user.verification_code !== code || new Date() > user.verification_expiry)
     return res.status(400).json({ message: "Invalid or expired code" });
 
-  await prisma.subUser.update({
+  await prisma.Users.update({
     where: { email },
     data: {
       email_verified: true,
@@ -185,7 +185,7 @@ exports.resendOTP = async (req, res) => {
   try {
     const { email } = req.body;
 
-    const user = await prisma.subUser.findUnique({ where: { email } });
+    const user = await prisma.Users.findUnique({ where: { email } });
 
     if (!user) return res.status(404).json({ message: "User not found" });
     if (user.email_verified)
@@ -204,7 +204,7 @@ exports.resendOTP = async (req, res) => {
     ).toString();
     const expiry = new Date(Date.now() + 10 * 60 * 1000); // 10 دقايق
 
-    await prisma.subUser.update({
+    await prisma.Users.update({
       where: { email },
       data: {
         verification_code: verificationCode,
@@ -232,12 +232,12 @@ exports.updateUser = async (req, res) => {
       tiktok_link,
       facebook_link,
       admin_comment,
-      user_type,    // جديد
-      roles,        // جديد
-      is_super_admin // جديد
+      user_type, // جديد
+      roles, // جديد
+      is_super_admin, // جديد
     } = req.body;
 
-    const userToUpdate = await prisma.subUser.findUnique({
+    const userToUpdate = await prisma.Users.findUnique({
       where: { id: parseInt(userId) },
     });
     if (!userToUpdate)
@@ -265,7 +265,7 @@ exports.updateUser = async (req, res) => {
       }
     }
 
-    const updatedUser = await prisma.subUser.update({
+    const updatedUser = await prisma.Users.update({
       where: { id: parseInt(userId) },
       data: {
         full_name,
@@ -288,7 +288,7 @@ exports.updateUser = async (req, res) => {
 exports.deleteUser = async (req, res) => {
   try {
     const { userId } = req.body;
-    const userToDelete = await prisma.subUser.findUnique({
+    const userToDelete = await prisma.Users.findUnique({
       where: { id: parseInt(userId) },
     });
     if (!userToDelete)
@@ -318,7 +318,7 @@ exports.deleteUser = async (req, res) => {
       }
     }
 
-    await prisma.subUser.delete({ where: { id: parseInt(userId) } });
+    await prisma.Users.delete({ where: { id: parseInt(userId) } });
     res.json({ message: "User deleted successfully" });
   } catch (error) {
     console.log(error);
@@ -329,7 +329,7 @@ exports.changePassword = async (req, res) => {
   try {
     const { email, old_password, new_password } = req.body;
 
-    const user = await prisma.subUser.findUnique({ where: { email } });
+    const user = await prisma.Users.findUnique({ where: { email } });
     if (!user) return res.status(404).json({ message: "User not found" });
 
     const isMatch = await bcrypt.compare(old_password, user.password);
@@ -338,7 +338,7 @@ exports.changePassword = async (req, res) => {
 
     const hashedNewPassword = await bcrypt.hash(new_password, 10);
 
-    await prisma.subUser.update({
+    await prisma.Users.update({
       where: { email },
       data: { password: hashedNewPassword },
     });
@@ -376,9 +376,9 @@ exports.getAllUsers = async (req, res) => {
     }
 
     // إجمالي عدد المستخدمين للصفحات
-    const total = await prisma.subUser.count({ where });
+    const total = await prisma.Users.count({ where });
 
-    const users = await prisma.subUser.findMany({
+    const users = await prisma.Users.findMany({
       where,
       include: { ads: true, bookings: true },
       skip,
@@ -403,7 +403,7 @@ exports.getAllUsers = async (req, res) => {
 exports.getUserAds = async (req, res) => {
   const userId = parseInt(req.params.userId);
 
-  const user = await prisma.subUser.findUnique({
+  const user = await prisma.Users.findUnique({
     where: { id: userId },
     include: { ads: true },
   });
@@ -419,7 +419,7 @@ exports.getUserAds = async (req, res) => {
 exports.getUserBookings = async (req, res) => {
   const userId = parseInt(req.params.userId);
 
-  const user = await prisma.subUser.findUnique({
+  const user = await prisma.Users.findUnique({
     where: { id: userId },
     include: { bookings: true },
   });

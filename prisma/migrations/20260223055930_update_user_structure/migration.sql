@@ -1,17 +1,17 @@
 /*
   Warnings:
 
-  - You are about to drop the column `username` on the `SubUser` table. All the data in the column will be lost.
-  - Added the required column `full_name` to the `SubUser` table without a default value. This is not possible if the table is not empty.
-  - Made the column `email` on table `SubUser` required. This step will fail if there are existing NULL values in that column.
-  - Made the column `phone` on table `SubUser` required. This step will fail if there are existing NULL values in that column.
+  - You are about to drop the column `username` on the `Users` table. All the data in the column will be lost.
+  - Added the required column `full_name` to the `Users` table without a default value. This is not possible if the table is not empty.
+  - Made the column `email` on table `Users` required. This step will fail if there are existing NULL values in that column.
+  - Made the column `phone` on table `Users` required. This step will fail if there are existing NULL values in that column.
 
 */
 -- DropIndex
-DROP INDEX "SubUser_username_key";
+DROP INDEX "Users_username_key";
 
 -- AlterTable
-ALTER TABLE "SubUser" DROP COLUMN "username",
+ALTER TABLE "Users" DROP COLUMN "username",
 ADD COLUMN     "admin_comment" TEXT,
 ADD COLUMN     "birth_date" TIMESTAMP(3),
 ADD COLUMN     "email_verified" BOOLEAN NOT NULL DEFAULT false,

@@ -1,5 +1,5 @@
 -- CreateTable
-CREATE TABLE "SubUser" (
+CREATE TABLE "Users" (
     "id" SERIAL NOT NULL,
     "username" TEXT NOT NULL,
     "email" TEXT,
@@ -9,7 +9,7 @@ CREATE TABLE "SubUser" (
     "user_verified" BOOLEAN NOT NULL DEFAULT false,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-    CONSTRAINT "SubUser_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "Users_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -20,7 +20,7 @@ CREATE TABLE "DVacation" (
     "rent_amount" DOUBLE PRECISION NOT NULL,
     "active" BOOLEAN NOT NULL DEFAULT true,
     "approved" BOOLEAN NOT NULL DEFAULT false,
-    "subuser_id" INTEGER NOT NULL,
+    "Users_id" INTEGER NOT NULL,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "DVacation_pkey" PRIMARY KEY ("table_id")
@@ -40,19 +40,19 @@ CREATE TABLE "Booking" (
 );
 
 -- CreateIndex
-CREATE UNIQUE INDEX "SubUser_username_key" ON "SubUser"("username");
+CREATE UNIQUE INDEX "Users_username_key" ON "Users"("username");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "SubUser_email_key" ON "SubUser"("email");
+CREATE UNIQUE INDEX "Users_email_key" ON "Users"("email");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "SubUser_phone_key" ON "SubUser"("phone");
+CREATE UNIQUE INDEX "Users_phone_key" ON "Users"("phone");
 
 -- AddForeignKey
-ALTER TABLE "DVacation" ADD CONSTRAINT "DVacation_subuser_id_fkey" FOREIGN KEY ("subuser_id") REFERENCES "SubUser"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "DVacation" ADD CONSTRAINT "DVacation_Users_id_fkey" FOREIGN KEY ("Users_id") REFERENCES "Users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Booking" ADD CONSTRAINT "Booking_ad_id_fkey" FOREIGN KEY ("ad_id") REFERENCES "DVacation"("table_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Booking" ADD CONSTRAINT "Booking_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "SubUser"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "Booking" ADD CONSTRAINT "Booking_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "Users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
