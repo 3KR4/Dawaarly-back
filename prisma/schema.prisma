@@ -202,11 +202,19 @@ model D_Vacation {
   Booking         Booking[]
   
   @@index([status])
+  @@index([created_at])
   @@index([city_id])
   @@index([governorate_id])
   @@index([area_id])
-  @@index([featured_priority])
+  @@index([compound_id])
+  @@index([categoryId])
+  @@index([subCategoryId])
   @@index([rent_amount])
+  @@index([deposit_amount])
+  @@index([featured_priority])
+  @@index([status, categoryId, city_id, created_at])
+  @@index([status, subCategoryId, city_id, created_at])
+  @@index([status, featured_priority])
 }
 
 model AdImage {
@@ -261,10 +269,8 @@ model Booking {
   to_date    DateTime
   created_at DateTime      @default(now())
   updated_at DateTime      @updatedAt
-
   ad      D_Vacation @relation(fields: [ad_id], references: [id], onDelete: Cascade)
-  user    Users?     @relation("UserBookings", fields: [usersId], references: [id])
-  usersId Int?
+  user Users @relation("UserBookings", fields: [user_id], references: [id])
 
   @@index([status])
   @@index([user_id])

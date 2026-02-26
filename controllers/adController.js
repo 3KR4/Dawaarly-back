@@ -34,18 +34,87 @@ exports.createAd = async (req, res) => {
 // Update Ad
 exports.updateAd = async (req, res) => {
   try {
-    const adId = Number(req.params.id);
-    const data = req.body;
+    const adId = Number(req.params.adId);
 
-    const ad = await prisma.D_Vacation.update({
+    const existingAd = await prisma.D_Vacation.findUnique({
       where: { id: adId },
-      data: data,
     });
 
-    res.status(200).json({ message: "Ad updated", ad });
+    if (!existingAd)
+      return res.status(404).json({ message: "Ad not found" });
+
+    const allowedFields = [
+      "title",
+      "description",
+      "categoryId",
+      "subCategoryId",
+      "display_phone",
+      "display_whatsapp",
+      "display_dawaarly_contact",
+      "rent_amount",
+      "rent_currency",
+      "rent_frequency",
+      "deposit_amount",
+      "min_rent_period",
+      "min_rent_period_unit",
+      "available_from",
+      "available_to",
+      "country_id",
+      "governorate_id",
+      "city_id",
+      "area_id",
+      "compound_id",
+      "bedrooms",
+      "bathrooms",
+      "level",
+      "adult_no_max",
+      "child_no_max",
+      "am_seeview",
+      "am_pool",
+      "am_balcony",
+      "am_private_garden",
+      "am_kitchen",
+      "am_ac",
+      "am_heating",
+      "am_elevator",
+      "am_gym",
+      "tags",
+    ];
+
+    const filteredData = Object.fromEntries(
+      Object.entries(req.body).filter(([key]) =>
+        allowedFields.includes(key)
+      )
+    );
+
+    // 🚫 منع update فاضي
+    if (Object.keys(filteredData).length === 0) {
+      return res.status(400).json({
+        message: "No valid fields provided for update",
+      });
+    }
+
+    if (filteredData.available_from)
+      filteredData.available_from = new Date(filteredData.available_from);
+
+    if (filteredData.available_to)
+      filteredData.available_to = new Date(filteredData.available_to);
+
+    const updatedAd = await prisma.D_Vacation.update({
+      where: { id: adId },
+      data: filteredData,
+    });
+
+    res.status(200).json({
+      message: "Ad updated successfully",
+      ad: updatedAd,
+    });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: "Server Error", error: err.message });
+    res.status(500).json({
+      message: "Server Error",
+      error: err.message,
+    });
   }
 };
 // Delete Ad
@@ -75,7 +144,7 @@ exports.deleteAd = async (req, res) => {
 exports.deleteOneImage = async (req, res) => {
   const { imageId } = req.params;
 
-  const image = await prisma.adImage.findUnique({
+  const image = await prisma.AdImage.findUnique({
     where: { id: Number(imageId) },
   });
 
@@ -83,7 +152,7 @@ exports.deleteOneImage = async (req, res) => {
 
   await cloudinary.uploader.destroy(image.public_id);
 
-  await prisma.adImage.delete({
+  await prisma.AdImage.delete({
     where: { id: Number(imageId) },
   });
 
@@ -95,17 +164,63 @@ exports.changeAdStatus = async (req, res) => {
     const { adId } = req.params;
     const { status, reason } = req.body;
 
-    if (!["ACTIVE", "REJECTED", "DISABLED", "SOLD", "BOOKED"].includes(status))
-      return res.status(400).json({ message: "Invalid status" });
-
     const ad = await prisma.D_Vacation.findUnique({
       where: { id: Number(adId) },
     });
-    if (!ad) return res.status(404).json({ message: "Ad not found" });
 
-    // If rejected → add reason
-    if (status === "REJECTED" && !reason)
-      return res.status(400).json({ message: "Reason required for rejection" });
+    if (!ad)
+      return res.status(404).json({ message: "Ad not found" });
+
+    const isAdmin =
+      req.user?.is_super_admin ||
+      req.user?.roles?.includes("admin");
+
+    const isOwner =
+      ad.admin_id === req.user.id ||
+      ad.subuser_id === req.user.id;
+
+    // الحالات المسموحة
+    const allowedStatuses = [
+      "ACTIVE",
+      "REJECTED",
+      "DISABLED",
+      "SOLD",
+      "BOOKED",
+    ];
+
+    if (!allowedStatuses.includes(status)) {
+      return res.status(400).json({ message: "Invalid status" });
+    }
+
+    /*
+      🧠 المنطق:
+      - Admin → يغير لأي حاجة
+      - Subscriber (Owner) → يقدر يعمل DISABLED بس
+    */
+
+    if (!isAdmin) {
+      if (!isOwner)
+        return res.status(403).json({ message: "Access denied" });
+
+      if (status !== "DISABLED") {
+        return res.status(403).json({
+          message: "You can only disable your own ad",
+        });
+      }
+    }
+
+    // لو Reject لازم سبب (Admin فقط)
+    if (status === "REJECTED") {
+      if (!isAdmin)
+        return res.status(403).json({
+          message: "Only admin can reject ads",
+        });
+
+      if (!reason)
+        return res.status(400).json({
+          message: "Reason required for rejection",
+        });
+    }
 
     const updatedAd = await prisma.D_Vacation.update({
       where: { id: Number(adId) },
@@ -122,7 +237,10 @@ exports.changeAdStatus = async (req, res) => {
       });
     }
 
-    res.json(updatedAd);
+    res.json({
+      message: `Ad status updated to ${status}`,
+      ad: updatedAd,
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Server Error" });
@@ -145,6 +263,9 @@ const adIncludeRelations = {
 exports.getAllAds = async (req, res) => {
   try {
     const {
+      page = 1,
+      limit = 10,
+      status,
       search,
       category,
       subCategory,
@@ -183,99 +304,151 @@ exports.getAllAds = async (req, res) => {
       max_available_to,
     } = req.query;
 
-    const ads = await prisma.D_Vacation.findMany({
-      where: {
-        AND: [
-          search
-            ? {
-                OR: [
-                  { title: { contains: search, mode: "insensitive" } },
-                  { description: { contains: search, mode: "insensitive" } },
-                  { tags: { has: search } },
-                ],
-              }
-            : {},
-          category ? { categoryId: Number(category) } : {},
-          subCategory ? { subCategoryId: Number(subCategory) } : {},
-          country_id ? { country_id: Number(country_id) } : {},
-          governorate_id ? { governorate_id: Number(governorate_id) } : {},
-          city_id ? { city_id: Number(city_id) } : {},
-          area_id ? { area_id: Number(area_id) } : {},
-          compound_id ? { compound_id: Number(compound_id) } : {},
+    const pageNumber = Number(page);
+    const limitNumber = Number(limit);
+    const skip = (pageNumber - 1) * limitNumber;
 
-          min_rent_amount
-            ? { rent_amount: { gte: Number(min_rent_amount) } }
-            : {},
-          max_rent_amount
-            ? { rent_amount: { lte: Number(max_rent_amount) } }
-            : {},
-          rent_currency
-            ? { rent_currency: { in: rent_currency.split(",") } }
-            : {},
-          rent_frequency
-            ? { rent_frequency: { in: rent_frequency.split(",") } }
-            : {},
+    /*
+      🧠 تحديد الصلاحيات:
+      - لو Admin يقدر يحدد status
+      - لو User عادي يشوف ACTIVE بس
+      - لو مش مسجل دخول يشوف ACTIVE بس
+    */
 
-          min_deposit_amount
-            ? { deposit_amount: { gte: Number(min_deposit_amount) } }
-            : {},
-          max_deposit_amount
-            ? { deposit_amount: { lte: Number(max_deposit_amount) } }
-            : {},
-          min_rent_period
-            ? { min_rent_period: { gte: Number(min_rent_period) } }
-            : {},
-          max_rent_period
-            ? { min_rent_period: { lte: Number(max_rent_period) } }
-            : {},
-          min_bedrooms ? { bedrooms: { gte: Number(min_bedrooms) } } : {},
-          max_bedrooms ? { bedrooms: { lte: Number(max_bedrooms) } } : {},
-          min_bathrooms ? { bathrooms: { gte: Number(min_bathrooms) } } : {},
-          max_bathrooms ? { bathrooms: { lte: Number(max_bathrooms) } } : {},
-          min_level ? { level: { gte: Number(min_level) } } : {},
-          max_level ? { level: { lte: Number(max_level) } } : {},
-          min_adult_no_max
-            ? { adult_no_max: { gte: Number(min_adult_no_max) } }
-            : {},
-          max_adult_no_max
-            ? { adult_no_max: { lte: Number(max_adult_no_max) } }
-            : {},
-          min_child_no_max
-            ? { child_no_max: { gte: Number(min_child_no_max) } }
-            : {},
-          max_child_no_max
-            ? { child_no_max: { lte: Number(max_child_no_max) } }
-            : {},
+    const isAdmin =
+      req.user?.is_super_admin || req.user?.user_type?.includes("admin");
 
-          am_pool !== undefined ? { am_pool: am_pool === "true" } : {},
-          am_balcony !== undefined ? { am_balcony: am_balcony === "true" } : {},
-          am_private_garden !== undefined
-            ? { am_private_garden: am_private_garden === "true" }
-            : {},
-          am_kitchen !== undefined ? { am_kitchen: am_kitchen === "true" } : {},
-          am_ac !== undefined ? { am_ac: am_ac === "true" } : {},
-          am_heating !== undefined ? { am_heating: am_heating === "true" } : {},
-          am_elevator !== undefined
-            ? { am_elevator: am_elevator === "true" }
-            : {},
-          am_gym !== undefined ? { am_gym: am_gym === "true" } : {},
+    let statusFilter;
 
-          min_available_from
-            ? { available_from: { gte: new Date(min_available_from) } }
-            : {},
-          max_available_to
-            ? { available_to: { lte: new Date(max_available_to) } }
-            : {},
-        ],
+    if (isAdmin) {
+      // الأدمن يقدر يفلتر بأي status
+      statusFilter = status ? { status } : {};
+    } else {
+      // أي حد غير الأدمن يشوف ACTIVE بس
+      statusFilter = { status: "ACTIVE" };
+    }
+    console.log("statusFilter:", statusFilter);
+    console.log("req.user:", req.user);
+
+    const filters = [
+      statusFilter,
+
+      search
+        ? {
+            OR: [
+              { title: { contains: search, mode: "insensitive" } },
+              { description: { contains: search, mode: "insensitive" } },
+              { tags: { has: search } },
+            ],
+          }
+        : {},
+
+      category ? { categoryId: Number(category) } : {},
+      subCategory ? { subCategoryId: Number(subCategory) } : {},
+      country_id ? { country_id: Number(country_id) } : {},
+      governorate_id ? { governorate_id: Number(governorate_id) } : {},
+      city_id ? { city_id: Number(city_id) } : {},
+      area_id ? { area_id: Number(area_id) } : {},
+      compound_id ? { compound_id: Number(compound_id) } : {},
+
+      min_rent_amount ? { rent_amount: { gte: Number(min_rent_amount) } } : {},
+      max_rent_amount ? { rent_amount: { lte: Number(max_rent_amount) } } : {},
+
+      rent_currency ? { rent_currency: { in: rent_currency.split(",") } } : {},
+
+      rent_frequency
+        ? { rent_frequency: { in: rent_frequency.split(",") } }
+        : {},
+
+      min_deposit_amount
+        ? { deposit_amount: { gte: Number(min_deposit_amount) } }
+        : {},
+      max_deposit_amount
+        ? { deposit_amount: { lte: Number(max_deposit_amount) } }
+        : {},
+
+      min_rent_period
+        ? { min_rent_period: { gte: Number(min_rent_period) } }
+        : {},
+      max_rent_period
+        ? { min_rent_period: { lte: Number(max_rent_period) } }
+        : {},
+
+      min_bedrooms ? { bedrooms: { gte: Number(min_bedrooms) } } : {},
+      max_bedrooms ? { bedrooms: { lte: Number(max_bedrooms) } } : {},
+
+      min_bathrooms ? { bathrooms: { gte: Number(min_bathrooms) } } : {},
+      max_bathrooms ? { bathrooms: { lte: Number(max_bathrooms) } } : {},
+
+      min_level ? { level: { gte: Number(min_level) } } : {},
+      max_level ? { level: { lte: Number(max_level) } } : {},
+
+      min_adult_no_max
+        ? { adult_no_max: { gte: Number(min_adult_no_max) } }
+        : {},
+      max_adult_no_max
+        ? { adult_no_max: { lte: Number(max_adult_no_max) } }
+        : {},
+
+      min_child_no_max
+        ? { child_no_max: { gte: Number(min_child_no_max) } }
+        : {},
+      max_child_no_max
+        ? { child_no_max: { lte: Number(max_child_no_max) } }
+        : {},
+
+      am_pool !== undefined ? { am_pool: am_pool === "true" } : {},
+      am_balcony !== undefined ? { am_balcony: am_balcony === "true" } : {},
+      am_private_garden !== undefined
+        ? { am_private_garden: am_private_garden === "true" }
+        : {},
+      am_kitchen !== undefined ? { am_kitchen: am_kitchen === "true" } : {},
+      am_ac !== undefined ? { am_ac: am_ac === "true" } : {},
+      am_heating !== undefined ? { am_heating: am_heating === "true" } : {},
+      am_elevator !== undefined ? { am_elevator: am_elevator === "true" } : {},
+      am_gym !== undefined ? { am_gym: am_gym === "true" } : {},
+
+      min_available_from
+        ? { available_from: { gte: new Date(min_available_from) } }
+        : {},
+      max_available_to
+        ? { available_to: { lte: new Date(max_available_to) } }
+        : {},
+    ];
+
+    const whereCondition = {
+      AND: filters,
+    };
+
+    const [ads, totalCount] = await Promise.all([
+      prisma.D_Vacation.findMany({
+        where: whereCondition,
+        skip,
+        take: limitNumber,
+        orderBy: { created_at: "desc" },
+        include: adIncludeRelations,
+      }),
+
+      prisma.D_Vacation.count({
+        where: whereCondition,
+      }),
+    ]);
+
+    res.json({
+      data: ads,
+      pagination: {
+        total: totalCount,
+        page: pageNumber,
+        limit: limitNumber,
+        totalPages: Math.ceil(totalCount / limitNumber),
       },
-      orderBy: { created_at: "desc" },
-      include: adIncludeRelations,
     });
-
-    res.json(ads);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: "Server Error", error: err.message });
+    res.status(500).json({
+      message: "Server Error",
+      error: err.message,
+    });
   }
 };
 exports.getAd = async (req, res) => {
@@ -289,6 +462,45 @@ exports.getAd = async (req, res) => {
     res.json(ad);
   } catch (err) {
     console.error(err);
+    res.status(500).json({ message: "Server Error" });
+  }
+};
+exports.getMyAds = async (req, res) => {
+  try {
+    const { page = 1, limit = 10, status } = req.query;
+
+    const pageNumber = Number(page);
+    const limitNumber = Number(limit);
+    const skip = (pageNumber - 1) * limitNumber;
+
+    const whereCondition = {
+      OR: [{ admin_id: req.user.id }, { subuser_id: req.user.id }],
+      ...(status ? { status } : {}),
+    };
+
+    const [ads, totalCount] = await Promise.all([
+      prisma.D_Vacation.findMany({
+        where: whereCondition,
+        skip,
+        take: limitNumber,
+        orderBy: { created_at: "desc" },
+      }),
+
+      prisma.D_Vacation.count({
+        where: whereCondition,
+      }),
+    ]);
+
+    res.json({
+      data: ads,
+      pagination: {
+        total: totalCount,
+        page: pageNumber,
+        limit: limitNumber,
+        totalPages: Math.ceil(totalCount / limitNumber),
+      },
+    });
+  } catch (error) {
     res.status(500).json({ message: "Server Error" });
   }
 };
@@ -331,24 +543,3 @@ exports.addView = async (req, res) => {
   }
 };
 // Reject Ad
-exports.rejectAd = async (req, res) => {
-  try {
-    const { adId } = req.params;
-    const { reason } = req.body;
-    if (!reason) return res.status(400).json({ message: "Reason required" });
-
-    const ad = await prisma.D_Vacation.update({
-      where: { id: Number(adId) },
-      data: { status: "REJECTED" },
-    });
-
-    const rejection = await prisma.adRejection.create({
-      data: { ad_id: Number(adId), admin_id: req.user.id, reason },
-    });
-
-    res.json({ ad, rejection });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server Error" });
-  }
-};
