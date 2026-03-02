@@ -1,8 +1,10 @@
-const express = require("express")
-const router = express.Router()
+const express = require("express");
+const router = express.Router();
 const {
   register,
   login,
+  refreshToken,
+  logout,
   verifyEmail,
   resendOTP,
   updateUser,
@@ -11,23 +13,25 @@ const {
   getUserAds,
   getUserBookings,
   getAllUsers
-} = require("../controllers/authController")
-const { authenticate } = require("../middlewares/authMiddleware")
+} = require("../controllers/authController");
+const { authenticate } = require("../middlewares/authMiddleware");
 
 // Auth
-router.post("/register", register)
-router.post("/login", login)
-router.post("/verify-email", verifyEmail)
-router.post("/resend-otp", resendOTP)
+router.post("/register", register);
+router.post("/login", login);
+router.post("/verify-email", verifyEmail);
+router.post("/resend-otp", resendOTP);
+router.post("/refresh-token", refreshToken);
+router.post("/logout", logout);
 
 // User management
-router.put("/user/:userId", authenticate, updateUser)       // تعديل بيانات المستخدم
-router.put("/change-password", authenticate, changePassword) // تغيير الباسورد
-router.delete("/delete-user", authenticate, deleteUser)    // حذف حساب المستخدم
+router.put("/user/:userId", authenticate, updateUser);
+router.put("/change-password", authenticate, changePassword);
+router.delete("/delete-user", authenticate, deleteUser);
 
 // User-specific data
-router.get("/user-bookings/:userId", authenticate, getUserBookings) // جلب الـ bookings
-router.get("/user-ads/:userId", authenticate, getUserAds)           // جلب الـ ads
+router.get("/user-bookings/:userId", authenticate, getUserBookings);
+router.get("/user-ads/:userId", authenticate, getUserAds);
 router.get("/all-users", authenticate, getAllUsers);
 
-module.exports = router
+module.exports = router;

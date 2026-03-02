@@ -2,7 +2,7 @@ const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 const cloudinary = require("../utils/cloudinary");
 const { parseAdData } = require("../utils/convertTypes");
-
+const jwt = require("jsonwebtoken");
 // Validation utility
 const { validateAdDates, validateRentPeriod } = require("../utils/validation");
 
@@ -11,21 +11,29 @@ exports.createAd = async (req, res) => {
   try {
     const data = req.body;
 
-    // تعيين الـ user المناسب مباشرة
+    const isAdmin =
+      req.user?.is_super_admin || req.user?.permissions?.includes("create-ads");
+
     const userData = {};
-    if (req.user.user_type === "admin") userData.admin_id = req.user.id;
-    else userData.subuser_id = req.user.id;
+    if (req.user.user_type === "admin") {
+      userData.admin_id = req.user.id;
+    } else {
+      userData.subuser_id = req.user.id;
+    }
 
     const adData = {
       ...data,
       ...userData,
-      status: "PENDING", // الافتراضي
+      status: isAdmin ? "ACTIVE" : "PENDING",
+      approved_at: isAdmin ? new Date() : null,
     };
 
-    // إنشاء الإعلان
     const ad = await prisma.D_Vacation.create({ data: adData });
 
-    res.status(201).json({ message: "Ad created", adId: ad.id });
+    res.status(201).json({
+      message: "Ad created successfully",
+      adId: ad.id,
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Server Error", error: err.message });
@@ -40,59 +48,16 @@ exports.updateAd = async (req, res) => {
       where: { id: adId },
     });
 
-    if (!existingAd)
-      return res.status(404).json({ message: "Ad not found" });
+    if (!existingAd) return res.status(404).json({ message: "Ad not found" });
 
-    const allowedFields = [
-      "title",
-      "description",
-      "categoryId",
-      "subCategoryId",
-      "display_phone",
-      "display_whatsapp",
-      "display_dawaarly_contact",
-      "rent_amount",
-      "rent_currency",
-      "rent_frequency",
-      "deposit_amount",
-      "min_rent_period",
-      "min_rent_period_unit",
-      "available_from",
-      "available_to",
-      "country_id",
-      "governorate_id",
-      "city_id",
-      "area_id",
-      "compound_id",
-      "bedrooms",
-      "bathrooms",
-      "level",
-      "adult_no_max",
-      "child_no_max",
-      "am_seeview",
-      "am_pool",
-      "am_balcony",
-      "am_private_garden",
-      "am_kitchen",
-      "am_ac",
-      "am_heating",
-      "am_elevator",
-      "am_gym",
-      "tags",
-    ];
+    const isAdmin =
+      req.user?.permissions?.includes("edit-ads") || req.user?.is_super_admin;
+    const isOwner =
+      req.ad.admin_id === req.user.id || req.ad.subuser_id === req.user.id;
+    if (!isOwner && !isAdmin)
+      return res.status(403).json({ message: "Access denied" });
 
-    const filteredData = Object.fromEntries(
-      Object.entries(req.body).filter(([key]) =>
-        allowedFields.includes(key)
-      )
-    );
-
-    // 🚫 منع update فاضي
-    if (Object.keys(filteredData).length === 0) {
-      return res.status(400).json({
-        message: "No valid fields provided for update",
-      });
-    }
+    const filteredData = { ...req.body };
 
     if (filteredData.available_from)
       filteredData.available_from = new Date(filteredData.available_from);
@@ -100,31 +65,49 @@ exports.updateAd = async (req, res) => {
     if (filteredData.available_to)
       filteredData.available_to = new Date(filteredData.available_to);
 
+    // 👇 أهم جزء
+    if (!isAdmin && existingAd.status === "ACTIVE") {
+      filteredData.status = "PENDING";
+      filteredData.was_previously_approved = true;
+      filteredData.approved_at = null;
+    }
+
     const updatedAd = await prisma.D_Vacation.update({
       where: { id: adId },
       data: filteredData,
     });
 
-    res.status(200).json({
+    res.json({
       message: "Ad updated successfully",
       ad: updatedAd,
     });
   } catch (err) {
     console.error(err);
-    res.status(500).json({
-      message: "Server Error",
-      error: err.message,
-    });
+    res.status(500).json({ message: "Server Error" });
   }
 };
 // Delete Ad
 exports.deleteAd = async (req, res) => {
   try {
-    const { adId } = req.params;
+    const adId = Number(req.params.adId);
 
-    // حذف الصور من Cloudinary
+    const ad = await prisma.D_Vacation.findUnique({
+      where: { id: adId },
+    });
+
+    if (!ad) return res.status(404).json({ message: "Ad not found" });
+
+    const isOwner =
+      ad.admin_id === req.user.id || ad.subuser_id === req.user.id;
+
+    const canDelete =
+      req.user.is_super_admin || req.user.permissions?.includes("delete-ads");
+
+    if (!isOwner && !canDelete)
+      return res.status(403).json({ message: "Access denied" });
+
     const images = await prisma.AdImage.findMany({
-      where: { ad_id: Number(adId) },
+      where: { ad_id: adId },
     });
 
     for (const img of images) {
@@ -132,12 +115,11 @@ exports.deleteAd = async (req, res) => {
     }
 
     await prisma.D_Vacation.delete({
-      where: { id: Number(adId) },
+      where: { id: adId },
     });
 
     res.json({ message: "Ad deleted successfully" });
   } catch (err) {
-    console.error(err);
     res.status(500).json({ message: "Server Error" });
   }
 };
@@ -168,16 +150,14 @@ exports.changeAdStatus = async (req, res) => {
       where: { id: Number(adId) },
     });
 
-    if (!ad)
-      return res.status(404).json({ message: "Ad not found" });
+    if (!ad) return res.status(404).json({ message: "Ad not found" });
 
     const isAdmin =
       req.user?.is_super_admin ||
-      req.user?.roles?.includes("admin");
+      req.user?.permissions?.includes("change-ads-status");
 
     const isOwner =
-      ad.admin_id === req.user.id ||
-      ad.subuser_id === req.user.id;
+      ad.admin_id === req.user.id || ad.subuser_id === req.user.id;
 
     // الحالات المسموحة
     const allowedStatuses = [
@@ -197,10 +177,8 @@ exports.changeAdStatus = async (req, res) => {
       - Admin → يغير لأي حاجة
       - Subscriber (Owner) → يقدر يعمل DISABLED بس
     */
-
     if (!isAdmin) {
-      if (!isOwner)
-        return res.status(403).json({ message: "Access denied" });
+      if (!isOwner) return res.status(403).json({ message: "Access denied" });
 
       if (status !== "DISABLED") {
         return res.status(403).json({
@@ -210,6 +188,7 @@ exports.changeAdStatus = async (req, res) => {
     }
 
     // لو Reject لازم سبب (Admin فقط)
+    let rejectReason = null;
     if (status === "REJECTED") {
       if (!isAdmin)
         return res.status(403).json({
@@ -220,22 +199,14 @@ exports.changeAdStatus = async (req, res) => {
         return res.status(400).json({
           message: "Reason required for rejection",
         });
+
+      rejectReason = reason; // نخزن السبب في الحقل
     }
 
     const updatedAd = await prisma.D_Vacation.update({
       where: { id: Number(adId) },
-      data: { status },
+      data: { status, reject_reason: rejectReason },
     });
-
-    if (status === "REJECTED") {
-      await prisma.adRejection.create({
-        data: {
-          ad_id: Number(adId),
-          admin_id: req.user.id,
-          reason,
-        },
-      });
-    }
 
     res.json({
       message: `Ad status updated to ${status}`,
@@ -249,8 +220,17 @@ exports.changeAdStatus = async (req, res) => {
 // Get single Ad
 const adIncludeRelations = {
   images: true,
-  admin: { select: { id: true, full_name: true, email: true } },
-  subuser: { select: { id: true, full_name: true, email: true } },
+  admin: { select: { id: true, full_name: true, phone: true, email: true } },
+  subuser: {
+    select: {
+      id: true,
+      full_name: true,
+      phone: true,
+      created_at: true,
+      active_ads_count: true,
+      email: true,
+    },
+  },
   Categories: { select: { id: true, name_en: true, name_ar: true } },
   SubCategories: { select: { id: true, name_en: true, name_ar: true } },
   country: { select: { id: true, name_en: true, name_ar: true } },
@@ -259,6 +239,66 @@ const adIncludeRelations = {
   area: { select: { id: true, name_en: true, name_ar: true } },
   compound: { select: { id: true, name_en: true, name_ar: true } },
 };
+function removeForeignKeys(ad) {
+  const {
+    admin_id,
+    subuser_id,
+    usersId,
+    categoryId,
+    subCategoryId,
+    country_id,
+    governorate_id,
+    city_id,
+    area_id,
+    compound_id,
+    ...cleaned
+  } = ad;
+  return cleaned;
+}
+
+// Helper: تحديد حالة الفيفوريت
+async function attachIsFavorite(tx, ad, userId) {
+  if (!userId) return false;
+  const fav = await tx.adFavorite.findUnique({
+    where: {
+      ad_id_user_id: { ad_id: ad.id, user_id: userId },
+    },
+  });
+  return !!fav;
+}
+function formatAdResponse(ad) {
+  const amenities = {};
+  const unitDetails = {};
+
+  Object.keys(ad).forEach((key) => {
+    // جمع am_
+    if (key.startsWith("am_")) {
+      amenities[key.replace("am_", "")] = ad[key];
+    }
+
+    // جمع unit details
+    if (["bedrooms", "bathrooms", "level"].includes(key)) {
+      unitDetails[key] = ad[key];
+    }
+  });
+
+  // نحذف القيم القديمة
+  const cleaned = { ...ad };
+
+  Object.keys(cleaned).forEach((key) => {
+    if (key.startsWith("am_")) delete cleaned[key];
+  });
+
+  delete cleaned.bedrooms;
+  delete cleaned.bathrooms;
+  delete cleaned.level;
+
+  return {
+    ...cleaned,
+    amenities,
+    details: unitDetails,
+  };
+}
 
 exports.getAllAds = async (req, res) => {
   try {
@@ -315,20 +355,30 @@ exports.getAllAds = async (req, res) => {
       - لو مش مسجل دخول يشوف ACTIVE بس
     */
 
-    const isAdmin =
-      req.user?.is_super_admin || req.user?.user_type?.includes("admin");
+    let userId = null;
+    let isAdmin = false;
 
-    let statusFilter;
+    const authHeader = req.headers["authorization"] || req.headers["x-api-key"];
+    if (authHeader) {
+      const token = authHeader.startsWith("Bearer ")
+        ? authHeader.split(" ")[1]
+        : authHeader;
 
-    if (isAdmin) {
-      // الأدمن يقدر يفلتر بأي status
-      statusFilter = status ? { status } : {};
-    } else {
-      // أي حد غير الأدمن يشوف ACTIVE بس
-      statusFilter = { status: "ACTIVE" };
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        userId = decoded.id;
+
+        isAdmin = decoded.is_super_admin;
+      } catch (err) {
+        console.log("Invalid token", err);
+      }
+      console.log("authHeader:", authHeader);
     }
-    console.log("statusFilter:", statusFilter);
-    console.log("req.user:", req.user);
+    let statusFilter = { status: "ACTIVE" }; // default
+
+    if (isAdmin && status) {
+      statusFilter = { status: status.trim() }; // trim لأي مسافات
+    }
 
     const filters = [
       statusFilter,
@@ -434,8 +484,20 @@ exports.getAllAds = async (req, res) => {
       }),
     ]);
 
+    const cleanedAds = await Promise.all(
+      ads.map(async (ad) => {
+        const isFavorite = await attachIsFavorite(prisma, ad, userId);
+
+        const formattedAd = formatAdResponse(removeForeignKeys(ad));
+
+        return {
+          ...formattedAd,
+          isFavorite,
+        };
+      }),
+    );
     res.json({
-      data: ads,
+      data: cleanedAds,
       pagination: {
         total: totalCount,
         page: pageNumber,
@@ -453,15 +515,166 @@ exports.getAllAds = async (req, res) => {
 };
 exports.getAd = async (req, res) => {
   try {
-    const { adId } = req.params;
-    const ad = await prisma.D_Vacation.findUnique({
-      where: { id: Number(adId) },
+    const adId = Number(req.params.adId);
+
+    const ad = await prisma.d_Vacation.findUnique({
+      where: { id: adId },
       include: adIncludeRelations,
     });
-    if (!ad) return res.status(404).json({ message: "Ad not found" });
-    res.json(ad);
+
+    if (!ad) {
+      return res.status(404).json({ message: "Ad not found" });
+    }
+
+    const userId = req.user?.id || null;
+    const ipAddress = req.ip;
+
+    // 🔥 نحسب active ads لو Subuser
+    let activeAdsCountPromise = null;
+
+    if (ad.subuser) {
+      activeAdsCountPromise = prisma.d_Vacation.count({
+        where: {
+          subuser_id: ad.subuser.id,
+          status: "ACTIVE",
+        },
+      });
+    }
+
+    await prisma.$transaction(async (tx) => {
+      // 1️⃣ increment views
+      await tx.d_Vacation.update({
+        where: { id: adId },
+        data: { views_count: { increment: 1 } },
+      });
+
+      // 2️⃣ reach logic
+      let reachExists;
+
+      if (userId) {
+        reachExists = await tx.adReach.findUnique({
+          where: {
+            ad_id_user_id: {
+              ad_id: adId,
+              user_id: userId,
+            },
+          },
+        });
+
+        if (!reachExists) {
+          await tx.adReach.create({
+            data: { ad_id: adId, user_id: userId },
+          });
+
+          await tx.d_Vacation.update({
+            where: { id: adId },
+            data: { reach_count: { increment: 1 } },
+          });
+        }
+      } else {
+        reachExists = await tx.adReach.findUnique({
+          where: {
+            ad_id_ip_address: {
+              ad_id: adId,
+              ip_address: ipAddress,
+            },
+          },
+        });
+
+        if (!reachExists) {
+          await tx.adReach.create({
+            data: { ad_id: adId, ip_address: ipAddress },
+          });
+
+          await tx.d_Vacation.update({
+            where: { id: adId },
+            data: { reach_count: { increment: 1 } },
+          });
+        }
+      }
+    });
+
+    // 🔥 نحسب activeAdsCount بعدين
+    const activeAdsCount = activeAdsCountPromise
+      ? await activeAdsCountPromise
+      : 0;
+
+    // 🔥 نجهز listed_by
+    let listedBy = null;
+
+    if (ad.admin) {
+      listedBy = {
+        type: "admin",
+        id: ad.admin.id,
+        name: process.env.SYSTEM_BRAND_NAME || "Dawaarly",
+        phone: ad.admin.phone,
+      };
+    } else if (ad.subuser) {
+      listedBy = {
+        type: "subscriber",
+        id: ad.subuser.id,
+        name: ad.subuser.full_name,
+        phone: ad.subuser.phone,
+        member_since: ad.subuser.created_at,
+        active_ads_count: activeAdsCount,
+      };
+    }
+
+    // 🔥 تنظيف الإعلان
+    let cleanedAd = removeForeignKeys(ad);
+    cleanedAd = formatAdResponse(cleanedAd);
+
+    // ❌ نشيل admin & subuser نهائيًا
+    delete cleanedAd.admin;
+    delete cleanedAd.subuser;
+
+    const isFavorite = await attachIsFavorite(prisma, ad, userId);
+
+    return res.json({
+      ...cleanedAd,
+      isFavorite,
+      listed_by: listedBy,
+    });
+
   } catch (err) {
     console.error(err);
+    res.status(500).json({ message: "Server Error" });
+  }
+};
+exports.getSectionsAds = async (req, res) => {
+  try {
+    const { type, value, page = 1, limit = 10 } = req.query;
+
+    const skip = (page - 1) * limit;
+
+    const where = {
+      status: "ACTIVE",
+    };
+
+    if (type === "category") {
+      where.categoryId = Number(value);
+    }
+
+    if (type === "subCategory") {
+      where.subCategoryId = Number(value);
+    }
+
+    if (type === "governorate") {
+      where.governorate_id = Number(value);
+    }
+
+    const ads = await prisma.D_Vacation.findMany({
+      where,
+      skip: Number(skip),
+      take: Number(limit),
+      orderBy: { featured_priority: "desc" },
+      include: {
+        images: true,
+      },
+    });
+
+    res.json(ads);
+  } catch (err) {
     res.status(500).json({ message: "Server Error" });
   }
 };
@@ -529,17 +742,3 @@ exports.removeFavorite = async (req, res) => {
     res.status(500).json({ message: "Server Error" });
   }
 };
-// Add view
-exports.addView = async (req, res) => {
-  try {
-    const { adId } = req.params;
-    const view = await prisma.adView.create({
-      data: { ad_id: Number(adId), user_id: req.user?.id, ip_address: req.ip },
-    });
-    res.json(view);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server Error" });
-  }
-};
-// Reject Ad

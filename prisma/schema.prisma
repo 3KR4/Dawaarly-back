@@ -16,7 +16,7 @@ model Users {
   birth_date     DateTime?
   gender         String?
   user_type      String    @default("user")
-  roles          String[]  @default([])
+  permissions    String[]  @default([])
   is_super_admin Boolean   @default(false)
 
   tiktok_link   String?
@@ -37,20 +37,29 @@ model Users {
   // علاقات الإعلانات
   ads_created_as_admin   D_Vacation[] @relation("AdminAds")
   ads_created_as_subuser D_Vacation[] @relation("SubuserAds")
-  ads                     D_Vacation[] @relation("UserAds")
-  
-  bookings Booking[] @relation("UserBookings")
+  ads                    D_Vacation[] @relation("UserAds")
 
-  created_at DateTime @default(now())
+  bookings      Booking[]      @relation("UserBookings")
+  created_at    DateTime       @default(now())
+  refreshTokens RefreshToken[]
+}
+
+model RefreshToken {
+  id        Int      @id @default(autoincrement())
+  token     String   @unique
+  user      Users    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    Int
+  expiresAt DateTime
+  createdAt DateTime @default(now())
 }
 
 model Countries {
-  id           Int            @id @default(autoincrement())
-  name_en      String
-  name_ar      String
+  id      Int    @id @default(autoincrement())
+  name_en String
+  name_ar String
 
   governorates Governorates[]
-  ads          D_Vacation[] @relation("CountryAds")
+  ads          D_Vacation[]   @relation("CountryAds")
 }
 
 model Governorates {
@@ -60,8 +69,8 @@ model Governorates {
   country_id Int
   country    Countries @relation(fields: [country_id], references: [id])
 
-  cities     Cities[]
-  ads        D_Vacation[] @relation("GovernorateAds")
+  cities Cities[]
+  ads    D_Vacation[] @relation("GovernorateAds")
 
   @@index([country_id])
 }
@@ -73,18 +82,18 @@ model Cities {
   governorate_id Int
   governorate    Governorates @relation(fields: [governorate_id], references: [id])
 
-  areas          Areas[]
-  ads            D_Vacation[] @relation("CityAds")
+  areas Areas[]
+  ads   D_Vacation[] @relation("CityAds")
 
   @@index([governorate_id])
 }
 
 model Areas {
-  id        Int         @id @default(autoincrement())
-  name_en   String
-  name_ar   String
-  city_id   Int
-  city      Cities      @relation(fields: [city_id], references: [id])
+  id      Int    @id @default(autoincrement())
+  name_en String
+  name_ar String
+  city_id Int
+  city    Cities @relation(fields: [city_id], references: [id])
 
   compounds Compounds[]
   ads       D_Vacation[] @relation("AreaAds")
@@ -99,28 +108,28 @@ model Compounds {
   area_id Int
   area    Areas  @relation(fields: [area_id], references: [id])
 
-  ads     D_Vacation[] @relation("CompoundAds")
+  ads D_Vacation[] @relation("CompoundAds")
 
   @@index([area_id])
 }
 
 model Categories {
-  id            Int             @id @default(autoincrement())
-  name_en       String
-  name_ar       String
+  id      Int    @id @default(autoincrement())
+  name_en String
+  name_ar String
 
   subCategories SubCategories[]
-  ads           D_Vacation[] @relation("CategoryAds")
+  ads           D_Vacation[]    @relation("CategoryAds")
 }
 
 model SubCategories {
-  id          Int          @id @default(autoincrement())
+  id          Int        @id @default(autoincrement())
   name_en     String
   name_ar     String
   category_id Int
-  category    Categories   @relation(fields: [category_id], references: [id])
+  category    Categories @relation(fields: [category_id], references: [id])
 
-  ads         D_Vacation[] @relation("SubCategoryAds")
+  ads D_Vacation[] @relation("SubCategoryAds")
 }
 
 model D_Vacation {
@@ -141,9 +150,9 @@ model D_Vacation {
   description String
 
   categoryId    Int?
-  Categories      Categories?    @relation("CategoryAds", fields: [categoryId], references: [id])
+  Categories    Categories?    @relation("CategoryAds", fields: [categoryId], references: [id])
   subCategoryId Int?
-  SubCategories   SubCategories? @relation("SubCategoryAds", fields: [subCategoryId], references: [id])
+  SubCategories SubCategories? @relation("SubCategoryAds", fields: [subCategoryId], references: [id])
 
   display_phone            Boolean @default(true)
   display_whatsapp         Boolean @default(true)
@@ -159,15 +168,15 @@ model D_Vacation {
   available_to         DateTime?
 
   country_id     Int
-  country        Countries @relation("CountryAds", fields: [country_id], references: [id])
+  country        Countries    @relation("CountryAds", fields: [country_id], references: [id])
   governorate_id Int
   governorate    Governorates @relation("GovernorateAds", fields: [governorate_id], references: [id])
   city_id        Int
-  city           Cities @relation("CityAds", fields: [city_id], references: [id])
+  city           Cities       @relation("CityAds", fields: [city_id], references: [id])
   area_id        Int?
-  area           Areas? @relation("AreaAds", fields: [area_id], references: [id])
+  area           Areas?       @relation("AreaAds", fields: [area_id], references: [id])
   compound_id    Int?
-  compound       Compounds? @relation("CompoundAds", fields: [compound_id], references: [id])
+  compound       Compounds?   @relation("CompoundAds", fields: [compound_id], references: [id])
 
   bedrooms  Int?
   bathrooms Int?
@@ -186,21 +195,21 @@ model D_Vacation {
   am_elevator       Boolean @default(false)
   am_gym            Boolean @default(false)
 
-  tags String[]
+  reject_reason String?
+  tags          String[]
 
   views_count     Int @default(0)
   reach_count     Int @default(0)
   favorites_count Int @default(0)
 
-  created_at DateTime @default(now())
-  updated_at DateTime @updatedAt
+  created_at              DateTime     @default(now())
+  updated_at              DateTime     @updatedAt
+  was_previously_approved Boolean      @default(false)
+  images                  AdImage[]
+  favorites               AdFavorite[]
+  Booking                 Booking[]
+  adReaches               AdReach[]
 
-  images          AdImage[]
-  rejections      AdRejection[]
-  favorites       AdFavorite[]
-  views           AdView[]
-  Booking         Booking[]
-  
   @@index([status])
   @@index([created_at])
   @@index([city_id])
@@ -218,24 +227,14 @@ model D_Vacation {
 }
 
 model AdImage {
-  id         Int      @id @default(autoincrement())
+  id         Int        @id @default(autoincrement())
   ad_id      Int
   public_id  String
   secure_url String
-  is_cover   Boolean  @default(false)
+  is_cover   Boolean    @default(false)
   order      Int?
-  created_at DateTime @default(now())
+  created_at DateTime   @default(now())
   ad         D_Vacation @relation(fields: [ad_id], references: [id], onDelete: Cascade)
-}
-
-model AdRejection {
-  id         Int      @id @default(autoincrement())
-  ad_id      Int
-  admin_id   Int
-  reason     String
-  created_at DateTime @default(now())
-
-  ad D_Vacation @relation(fields: [ad_id], references: [id], onDelete: Cascade)
 }
 
 model AdFavorite {
@@ -248,16 +247,17 @@ model AdFavorite {
   @@unique([ad_id, user_id])
 }
 
-model AdView {
+model AdReach {
   id         Int      @id @default(autoincrement())
   ad_id      Int
-  ip_address String?
   user_id    Int?
+  ip_address String?
   created_at DateTime @default(now())
 
   ad D_Vacation @relation(fields: [ad_id], references: [id], onDelete: Cascade)
 
-  @@index([ad_id])
+  @@unique([ad_id, user_id])
+  @@unique([ad_id, ip_address])
 }
 
 model Booking {
@@ -269,8 +269,8 @@ model Booking {
   to_date    DateTime
   created_at DateTime      @default(now())
   updated_at DateTime      @updatedAt
-  ad      D_Vacation @relation(fields: [ad_id], references: [id], onDelete: Cascade)
-  user Users @relation("UserBookings", fields: [user_id], references: [id])
+  ad         D_Vacation    @relation(fields: [ad_id], references: [id], onDelete: Cascade)
+  user       Users         @relation("UserBookings", fields: [user_id], references: [id])
 
   @@index([status])
   @@index([user_id])

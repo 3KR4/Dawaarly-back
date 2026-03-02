@@ -20,7 +20,7 @@ exports.authenticate = (req, res, next) => {
       id: decoded.id,
       user_type: decoded.role,       // user / subscriber / admin
       is_super_admin: decoded.is_super_admin || false, // true/false
-      roles: decoded.roles || [],    // array of strings لو موجودة
+      permissions: decoded.permissions || [],    // array of strings لو موجودة
     };
 
     next(); // 5️⃣ نمشي للـ route handler

@@ -14,34 +14,46 @@ function serializeUser(user) {
     birth_date: user.birth_date,
     created_at: user.created_at,
     user_type: user.user_type,
+    email_verified: user.email_verified,
+    phone_verified: user.phone_verified,
+    is_super_admin: user.is_super_admin || false,
   };
-
-  switch (user.user_type) {
-    case "subscriber":
-      base.tiktok_link = user.tiktok_link;
-      base.facebook_link = user.facebook_link;
-      base.active_ads_count = user.active_ads_count;
-      base.subscription_ads_limit = user.subscription_ads_limit || 0;
-      break;
-
-    case "admin":
-      base.roles = user.roles || [];
-      base.active_ads_count = user.active_ads_count;
-      break;
-
-    default:
-      // Regular user
-      base.email_verified = user.email_verified;
-      base.phone_verified = user.phone_verified;
-      break;
+  if (user.user_type === "subscriber") {
+    base.tiktok_link = user.tiktok_link;
+    base.facebook_link = user.facebook_link;
+    base.subscription_ads_limit = user.subscription_ads_limit || 0;
+  } else if (user.user_type === "admin") {
+    base.permissions = user.permissions || [];
   }
-  base.is_super_admin = user.is_super_admin || false;
   return base;
 }
+
+// ----------------------- Helper Tokens -----------------------
+function createAccessToken(user) {
+  return jwt.sign(
+    {
+      id: user.id,
+      role: user.user_type,
+      permissions: user.permissions || [],
+      is_super_admin: user.is_super_admin || false,
+    },
+    process.env.JWT_SECRET,
+    { expiresIn: "7d" }, // access token قصير
+  );
+}
+
+function createRefreshToken(user) {
+  return jwt.sign(
+    { id: user.id },
+    process.env.JWT_REFRESH_SECRET,
+    { expiresIn: "7d" }, // refresh token أطول
+  );
+}
+
+// ----------------------- REGISTER -----------------------
 exports.register = async (req, res) => {
   try {
     const { full_name, email, password, phone, birth_date, gender } = req.body;
-
     if (!full_name || !email || !password || !phone)
       return res.status(400).json({ message: "Missing required fields" });
 
@@ -73,44 +85,40 @@ exports.register = async (req, res) => {
 
     await sendVerificationEmail(email, verificationCode);
 
-    // Create JWT including roles & is_super_admin
-    const token = jwt.sign(
-      {
-        id: user.id,
-        role: user.user_type,
-        roles: user.roles || [],
-        is_super_admin: user.is_super_admin || false,
+    const accessToken = createAccessToken(user);
+    const refreshToken = createRefreshToken(user);
+
+    await prisma.RefreshToken.create({
+      data: {
+        token: refreshToken,
+        userId: user.id,
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
       },
-      process.env.JWT_SECRET,
-      { expiresIn: "7d" },
-    );
+    });
+
+    // Set refresh token in HTTP-only cookie
+    res.cookie("refreshToken", refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
 
     res.status(201).json({
       message: "User created, verify email",
-      token,
+      accessToken,
       user: serializeUser(user),
     });
   } catch (error) {
     console.log(error);
-
-    if (error.code === "P2002") {
-      const field = error.meta.target[0];
-      const messages = {
-        email: "This email is already registered",
-        phone: "This phone number is already registered",
-      };
-      return res
-        .status(400)
-        .json({ message: messages[field] || `${field} must be unique` });
-    }
-
     res.status(500).json({ message: "Server error" });
   }
 };
+
+// ----------------------- LOGIN -----------------------
 exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
-
     const user = await prisma.Users.findUnique({ where: { email } });
     if (!user) return res.status(404).json({ message: "User not found" });
 
@@ -123,7 +131,6 @@ exports.login = async (req, res) => {
         100000 + Math.random() * 900000,
       ).toString();
       const expiry = new Date(Date.now() + 10 * 60 * 1000);
-
       await prisma.Users.update({
         where: { email },
         data: {
@@ -131,35 +138,78 @@ exports.login = async (req, res) => {
           verification_expiry: expiry,
         },
       });
-
       await sendVerificationEmail(email, verificationCode);
-
       return res
         .status(403)
         .json({ message: "Email not verified. OTP resent." });
     }
 
-    // JWT with roles & is_super_admin
-    const token = jwt.sign(
-      {
-        id: user.id,
-        role: user.user_type,
-        roles: user.roles || [],
-        is_super_admin: user.is_super_admin || false,
-      },
-      process.env.JWT_SECRET,
-      { expiresIn: "7d" },
-    );
+    const accessToken = createAccessToken(user);
+    const refreshToken = createRefreshToken(user);
 
-    res.json({
-      token,
-      user: serializeUser(user),
+    await prisma.RefreshToken.create({
+      data: {
+        token: refreshToken,
+        userId: user.id,
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      },
+    });
+
+    res.cookie("refreshToken", refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+
+    res.json({ accessToken, user: serializeUser(user) });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+// ----------------------- REFRESH TOKEN -----------------------
+exports.refreshToken = async (req, res) => {
+  try {
+    const token = req.cookies.refreshToken;
+    if (!token) return res.status(401).json({ message: "No refresh token" });
+
+    const dbToken = await prisma.RefreshToken.findUnique({ where: { token } });
+    if (!dbToken)
+      return res.status(403).json({ message: "Invalid refresh token" });
+
+    jwt.verify(token, process.env.JWT_REFRESH_SECRET, async (err, decoded) => {
+      if (err)
+        return res.status(403).json({ message: "Refresh token expired" });
+
+      const user = await prisma.Users.findUnique({ where: { id: decoded.id } });
+      if (!user) return res.status(404).json({ message: "User not found" });
+
+      const newAccessToken = createAccessToken(user);
+      res.json({ accessToken: newAccessToken });
     });
   } catch (error) {
     console.log(error);
     res.status(500).json({ message: "Server error" });
   }
 };
+
+// ----------------------- LOGOUT -----------------------
+exports.logout = async (req, res) => {
+  try {
+    const token = req.cookies.refreshToken;
+    if (token) {
+      await prisma.RefreshToken.deleteMany({ where: { token } });
+      res.clearCookie("refreshToken");
+    }
+    res.json({ message: "Logged out successfully" });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
 exports.verifyEmail = async (req, res) => {
   const { email, code } = req.body;
 
@@ -232,9 +282,9 @@ exports.updateUser = async (req, res) => {
       tiktok_link,
       facebook_link,
       admin_comment,
-      user_type, // جديد
-      roles, // جديد
-      is_super_admin, // جديد
+      user_type, // admin / subscriber / user
+      permissions, // array of permissions
+      is_super_admin, // boolean
     } = req.body;
 
     const userToUpdate = await prisma.Users.findUnique({
@@ -245,9 +295,10 @@ exports.updateUser = async (req, res) => {
 
     const requester = req.user;
 
-    // قواعد الصلاحيات:
+    // ---------------- قواعد الصلاحيات ----------------
     if (!requester.is_super_admin) {
       if (requester.user_type === "admin") {
+        // Admin مش قادر يعدل Admin آخر إلا لو هو سوبر
         if (
           userToUpdate.user_type === "admin" &&
           !userToUpdate.is_super_admin
@@ -256,15 +307,28 @@ exports.updateUser = async (req, res) => {
             .status(403)
             .json({ message: "Admin cannot edit another admin" });
         }
+        // Admin عادي مش قادر يغير صلاحيات
+        if (user_type || permissions || is_super_admin !== undefined) {
+          return res
+            .status(403)
+            .json({ message: "You cannot change user_type or permissions" });
+        }
       } else {
+        // مستخدم عادي يقدر يعدل نفسه فقط
         if (requester.id !== userToUpdate.id) {
           return res
             .status(403)
             .json({ message: "You can only edit your own profile" });
         }
+        if (user_type || permissions || is_super_admin !== undefined) {
+          return res
+            .status(403)
+            .json({ message: "You cannot change user_type or permissions" });
+        }
       }
     }
 
+    // ---------------- تحديث البيانات ----------------
     const updatedUser = await prisma.Users.update({
       where: { id: parseInt(userId) },
       data: {
@@ -275,11 +339,22 @@ exports.updateUser = async (req, res) => {
         tiktok_link,
         facebook_link,
         admin_comment,
-        ...(requester.is_super_admin && { user_type, roles, is_super_admin }),
+        // السوبر أدمن فقط يقدر يغير النوع و الصلاحيات
+        ...(requester.is_super_admin && {
+          user_type: user_type || userToUpdate.user_type,
+          permissions: permissions || userToUpdate.permissions,
+          is_super_admin:
+            is_super_admin !== undefined
+              ? is_super_admin
+              : userToUpdate.is_super_admin,
+        }),
       },
     });
 
-    res.json(serializeUser(updatedUser));
+    res.json({
+      message: "User updated successfully",
+      user: serializeUser(updatedUser),
+    });
   } catch (error) {
     console.log(error);
     res.status(500).json({ message: "Server error" });
@@ -357,36 +432,45 @@ exports.getAllUsers = async (req, res) => {
     }
 
     let { user_type, search, page, limit } = req.query;
-
-    page = parseInt(page) || 1; // الصفحة الافتراضية
-    limit = parseInt(limit) || 10; // عدد المستخدمين في كل صفحة
+    page = parseInt(page) || 1;
+    limit = parseInt(limit) || 10;
     const skip = (page - 1) * limit;
 
     const where = {};
+    if (user_type) where.user_type = user_type;
+    if (search) where.full_name = { contains: search, mode: "insensitive" };
 
-    if (user_type) {
-      where.user_type = user_type;
-    }
-
-    if (search) {
-      where.full_name = {
-        contains: search,
-        mode: "insensitive",
-      };
-    }
-
-    // إجمالي عدد المستخدمين للصفحات
+    // إجمالي عدد المستخدمين
     const total = await prisma.Users.count({ where });
 
+    // جلب المستخدمين بدون الاعتماد على include.ads
     const users = await prisma.Users.findMany({
       where,
-      include: { ads: true, bookings: true },
       skip,
       take: limit,
       orderBy: { created_at: "desc" },
     });
 
-    const serializedUsers = users.map((u) => serializeUser(u));
+    // جلب عدد الإعلانات النشطة لكل مستخدم دفعة واحدة
+    const userIds = users.map((u) => u.id);
+    const activeAdsCounts = await prisma.D_Vacation.groupBy({
+      by: ["admin_id"],
+      where: {
+        admin_id: { in: userIds },
+        status: "ACTIVE",
+      },
+      _count: { id: true },
+    });
+
+    const countsMap = {};
+    activeAdsCounts.forEach((c) => (countsMap[c.admin_id] = c._count.id));
+
+    // تسلسل المستخدمين
+    const serializedUsers = users.map((u) => {
+      const base = serializeUser(u);
+      base.active_ads_count = countsMap[u.id] || 0;
+      return base;
+    });
 
     res.json({
       page,
@@ -396,10 +480,12 @@ exports.getAllUsers = async (req, res) => {
       users: serializedUsers,
     });
   } catch (error) {
-    console.log(error);
+    console.error(error);
     res.status(500).json({ message: "Server error" });
   }
 };
+
+// جلب إعلانات مستخدم معين
 exports.getUserAds = async (req, res) => {
   const userId = parseInt(req.params.userId);
 

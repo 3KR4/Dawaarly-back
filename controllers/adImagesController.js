@@ -48,7 +48,6 @@ exports.uploadAdImages = async (req, res) => {
     res.status(500).json({ message: "Server Error", error: err.message });
   }
 };
-
 // حذف صورة إعلان
 exports.deleteAdImage = async (req, res) => {
   try {
@@ -69,7 +68,6 @@ exports.deleteAdImage = async (req, res) => {
     res.status(500).json({ message: "Server Error", error: err.message });
   }
 };
-
 // تعديل صورة (cover أو order)
 exports.updateAdImage = async (req, res) => {
   try {
