@@ -252,7 +252,7 @@ exports.deleteAd = async (req, res) => {
     if (!isOwner && !canDelete)
       return res.status(403).json({ message: "Access denied" });
 
-    const images = await prisma.AdImage.findMany({
+    const images = await prisma.Images.findMany({
       where: { ad_id: adId },
     });
 
@@ -268,23 +268,6 @@ exports.deleteAd = async (req, res) => {
   } catch (err) {
     res.status(500).json({ message: "Server Error" });
   }
-};
-exports.deleteOneImage = async (req, res) => {
-  const { imageId } = req.params;
-
-  const image = await prisma.AdImage.findUnique({
-    where: { id: Number(imageId) },
-  });
-
-  if (!image) return res.status(404).json({ message: "Image not found" });
-
-  await cloudinary.uploader.destroy(image.public_id);
-
-  await prisma.AdImage.delete({
-    where: { id: Number(imageId) },
-  });
-
-  res.json({ message: "Image deleted" });
 };
 // Change Ad Status (Admin)
 exports.changeAdStatus = async (req, res) => {
@@ -363,9 +346,12 @@ exports.changeAdStatus = async (req, res) => {
     res.status(500).json({ message: "Server Error" });
   }
 };
-// Get single Ad
 const adIncludeRelations = {
-  images: true,
+  images: {
+    where: { entity_type: "AD" },
+    take: 1,
+    orderBy: { is_cover: "desc" },
+  },
   admin: {
     select: {
       id: true,
@@ -411,8 +397,8 @@ const adIncludeRelations = {
 };
 const adIncludeListRelations = {
   images: {
-    take: 1,
-    orderBy: { is_cover: "desc" },
+    where: { entity_type: "AD" },
+    orderBy: { order: "asc" }, // لو عايز كل الصور مرتبة
   },
   city: { select: { id: true, name_en: true, name_ar: true } },
   governorate: { select: { id: true, name_en: true, name_ar: true } },
@@ -513,8 +499,8 @@ function formatAdListResponse(ad) {
     }
   });
 
-  const firstImage =
-    ad.images?.find((img) => img.is_cover) || ad.images?.[0] || null;
+const firstImage =
+  ad.images?.find((img) => img.is_cover) || ad.images?.[0] || null;
 
   return {
     id: ad.id,
@@ -1032,7 +1018,10 @@ exports.getFavorites = async (req, res) => {
         include: {
           ad: {
             include: {
-              images: true, // هنا كله
+              images: {
+                where: { entity_type: "AD" },
+                orderBy: { order: "asc" },
+              },
               city: { select: { id: true, name_en: true, name_ar: true } },
               governorate: {
                 select: { id: true, name_en: true, name_ar: true },

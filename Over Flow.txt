@@ -1,0 +1,120 @@
+1 / Database Updates
+-----------------
+(1) Create subscription_requests table -- (✔)
+(2) Add governorate field to users table -- (✔)
+(3) Add city field to users table -- (✔)
+(4) Add relation between users and sub_categories for interests -- (✔)
+(5) Create homepage_sliders table (title, description, image, link) -- (✔)
+=====================================================================
+2 / Subscription Request System (Backend)
+--------------------------------------
+(1) Create API to submit subscription request -- (✔)
+(2) Create API to get all subscription requests (Admin) -- (✔)
+(3) Create API to approve subscription request -- (✔)
+(4) Create API to reject subscription request -- (✔)
+(5) Update user role to subscriber after approval -- (✔)
+=====================================================================
+3 / Backend Security Implementation
+---------------------------------
+(1) Implement Rate Limiting -- ()
+(2) Add security headers using Helmet -- ()
+(3) Configure CORS properly -- ()
+(4) Implement request sanitization -- ()
+(5) Implement basic caching for frequently requested data -- ()
+=====================================================================
+4 / Authentication System Improvements
+-----------------------------------
+(1) Implement Refresh Token system -- ()
+(2) Store refresh tokens securely -- ()
+(3) Create refresh token API endpoint -- ()
+(4) Implement logout functionality with token invalidation -- ()
+=====================================================================
+5 / Email System (Nodemailer)
+----------------------------
+(1) Configure Nodemailer email service -- ()
+(2) Send OTP verification email -- ()
+(3) Send email when ad status changes -- ()
+(4) Send email when booking is created -- ()
+(5) Send email when booking status changes -- ()
+(6) Create reusable email templates -- ()
+=====================================================================
+6 / Email Templates Design
+-----------------------
+(1) Create verification email template -- ()
+(2) Create booking notification template -- ()
+(3) Create ad status update template -- ()
+=====================================================================
+7 / Authentication & Profile Integration (Frontend)
+------------------------------------------------
+(1) Integrate login system -- ()
+(2) Implement email verification flow -- ()
+(3) Create user profile page -- ()
+(4) Implement edit profile functionality -- ()
+(5) Send user interests when creating account -- ()
+(6) Send user governorate and city when creating account -- ()
+=====================================================================
+8 / Ads Management Integration
+---------------------------
+(1) Integrate create ad request -- ()
+(2) Integrate update ad request -- ()
+(3) Integrate delete ad request -- ()
+(4) Integrate change ad status request -- ()
+(5) Integrate upload images to ad -- ()
+(6) Integrate update images -- ()
+(7) Integrate delete images -- ()
+=====================================================================
+9 / Favorites System
+-----------------
+(1) Create favorites page -- ()
+(2) Integrate add to favorites request -- ()
+(3) Integrate remove from favorites request -- ()
+(4) Integrate get user favorites request -- ()
+=====================================================================
+10 / Booking Management System
+--------------------------
+(1) Create admin bookings management table -- ()
+(2) Create user bookings table -- ()
+(3) Integrate get bookings API for admin -- ()
+(4) Integrate get bookings API for user -- ()
+(5) Integrate update booking status request -- ()
+(6) Add filters for bookings table -- ()
+=====================================================================
+11 / Users Management (Admin Dashboard)
+-----------------------------------
+(1) Create users management table -- ()
+(2) Integrate get users API -- ()
+(3) Implement change user role functionality -- ()
+(4) Implement block/unblock user functionality -- ()
+=====================================================================
+12 / Dashboard Access Protection
+---------------------------
+(1) Protect dashboard routes -- ()
+(2) Verify admin token before access -- ()
+(3) Redirect non-admin users away from dashboard -- ()
+=====================================================================
+13 / Filters System Refactor
+-----------------------
+(1) Update filters structure based on new categories -- ()
+(2) Update categories and subcategories logic -- ()
+(3) Update search filtering logic -- ()
+(4) Implement main real estate filter on homepage -- ()
+=====================================================================
+14 / Homepage Features
+------------------
+(1) Integrate homepage slider requests -- ()
+(2) Display sliders in homepage -- ()
+(3) Implement Swiper functionality -- ()
+=====================================================================
+15 / UI Components
+--------------
+(1) Create website footer -- ()
+(2) Implement full platform dark mode -- ()
+(3) Improve responsive behavior for tables -- ()
+=====================================================================
+16 / Final Improvements & Testing
+-----------------------------
+(1) Fix responsive issues across pages -- ()
+(2) Test all API integrations -- ()
+(3) Test authentication and refresh token flow -- ()
+(4) Test booking and notification emails -- ()
+(5) Fix bugs and finalize the platform -- ()

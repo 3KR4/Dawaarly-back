@@ -1,7 +1,6 @@
 generator client {
   provider = "prisma-client-js"
 }
-
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
@@ -19,20 +18,30 @@ model Users {
   permissions    String[]  @default([])
   is_super_admin Boolean   @default(false)
 
+  country_id      Int?
+  governorate_id  Int?
+  city_id         Int?
+
+  country     Countries?    @relation(fields: [country_id], references: [id])
+  governorate Governorates? @relation(fields: [governorate_id], references: [id])
+  city        Cities?       @relation(fields: [city_id], references: [id])
+
+  language String @default("en")
+  theme    String @default("light")
+
   tiktok_link   String?
   facebook_link String?
 
-  user_verified  Boolean @default(false)
   email_verified Boolean @default(false)
   phone_verified Boolean @default(false)
 
-  subscription_ads_limit Int?
+  subscription_ads_limit Int? @default(0)
   active_ads_count       Int  @default(0)
+  admin_comment       String?
 
   last_otp_sent_at    DateTime?
   verification_code   String?
   verification_expiry DateTime?
-  admin_comment       String?
 
   // علاقات الإعلانات
   ads_created_as_admin   D_Vacation[] @relation("AdminAds")
@@ -42,8 +51,15 @@ model Users {
   bookings      Booking[]      @relation("UserBookings")
   created_at    DateTime       @default(now())
   refreshTokens RefreshToken[]
-}
 
+  subscription_requests SubscriptionRequests[]
+
+  reviewed_requests SubscriptionRequests[] @relation("AdminReviewedRequests")
+
+  @@index([country_id])
+  @@index([governorate_id])
+  @@index([city_id])
+}
 model RefreshToken {
   id        Int      @id @default(autoincrement())
   token     String   @unique
@@ -52,84 +68,16 @@ model RefreshToken {
   expiresAt DateTime
   createdAt DateTime @default(now())
 }
-
-model Countries {
-  id      Int    @id @default(autoincrement())
-  name_en String
-  name_ar String
-
-  governorates Governorates[]
-  ads          D_Vacation[]   @relation("CountryAds")
-}
-
-model Governorates {
-  id         Int       @id @default(autoincrement())
-  name_en    String
-  name_ar    String
-  country_id Int
-  country    Countries @relation(fields: [country_id], references: [id])
-
-  cities Cities[]
-  ads    D_Vacation[] @relation("GovernorateAds")
-
-  @@index([country_id])
-}
-
-model Cities {
-  id             Int          @id @default(autoincrement())
-  name_en        String
-  name_ar        String
-  governorate_id Int
-  governorate    Governorates @relation(fields: [governorate_id], references: [id])
-
-  areas Areas[]
-  ads   D_Vacation[] @relation("CityAds")
-
-  @@index([governorate_id])
-}
-
-model Areas {
-  id      Int    @id @default(autoincrement())
-  name_en String
-  name_ar String
-  city_id Int
-  city    Cities @relation(fields: [city_id], references: [id])
-
-  compounds Compounds[]
-  ads       D_Vacation[] @relation("AreaAds")
-
-  @@index([city_id])
-}
-
-model Compounds {
-  id      Int    @id @default(autoincrement())
-  name_en String
-  name_ar String
-  area_id Int
-  area    Areas  @relation(fields: [area_id], references: [id])
-
-  ads D_Vacation[] @relation("CompoundAds")
-
-  @@index([area_id])
-}
-
-model Categories {
-  id      Int    @id @default(autoincrement())
-  name_en String
-  name_ar String
-
-  subCategories SubCategories[]
-  ads           D_Vacation[]    @relation("CategoryAds")
-}
-
-model SubCategories {
-  id          Int        @id @default(autoincrement())
-  name_en     String
-  name_ar     String
-  category_id Int
-  category    Categories @relation(fields: [category_id], references: [id])
-
-  ads D_Vacation[] @relation("SubCategoryAds")
+model SubscriptionRequests {
+  id               Int      @id @default(autoincrement())
+  user_id          Int
+  user             Users    @relation(fields: [user_id], references: [id])
+  status           String   @default("pending") // pending | approved | rejected
+  rejection_reason String?
+  reviewed_by      Int?
+  reviewer         Users?   @relation("AdminReviewedRequests", fields: [reviewed_by], references: [id])
+  created_at       DateTime @default(now())
+  reviewed_at      DateTime?
 }
 
 model D_Vacation {
@@ -143,8 +91,6 @@ model D_Vacation {
 
   admin   Users? @relation("AdminAds", fields: [admin_id], references: [id])
   subuser Users? @relation("SubuserAds", fields: [subuser_id], references: [id])
-  user    Users? @relation("UserAds", fields: [usersId], references: [id])
-  usersId Int?
 
   title       String @db.VarChar(100)
   description String
@@ -205,7 +151,6 @@ model D_Vacation {
   created_at              DateTime     @default(now())
   updated_at              DateTime     @updatedAt
   was_previously_approved Boolean      @default(false)
-  images                  AdImage[]
   favorites               AdFavorite[]
   Booking                 Booking[]
   adReaches               AdReach[]
@@ -226,25 +171,30 @@ model D_Vacation {
   @@index([status, featured_priority])
 }
 
-model AdImage {
-  id         Int        @id @default(autoincrement())
-  ad_id      Int
+model Images {
+  id Int @id @default(autoincrement())
+
   public_id  String
   secure_url String
-  is_cover   Boolean    @default(false)
-  order      Int?
-  created_at DateTime   @default(now())
-  ad         D_Vacation @relation(fields: [ad_id], references: [id], onDelete: Cascade)
+  folder     String?
+
+  entity_type ImageEntityType
+  entity_id   Int
+
+  is_cover Boolean @default(false)
+  order    Int?
+
+  created_at DateTime @default(now())
+
+  @@index([entity_type, entity_id])
 }
-
-model AdFavorite {
-  id      Int @id @default(autoincrement())
-  ad_id   Int
-  user_id Int
-
-  ad D_Vacation @relation(fields: [ad_id], references: [id], onDelete: Cascade)
-
-  @@unique([ad_id, user_id])
+enum ImageEntityType {
+  AD
+  SLIDER
+  USER
+  CATEGORY
+  AREA
+  COMPOUND
 }
 
 model AdReach {
@@ -259,6 +209,26 @@ model AdReach {
   @@unique([ad_id, user_id])
   @@unique([ad_id, ip_address])
 }
+model AdFavorite {
+
+  id Int @id @default(autoincrement())
+
+  ad_id Int
+  user_id Int
+
+  ad D_Vacation @relation(fields: [ad_id], references: [id], onDelete: Cascade)
+  user Users @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([ad_id, user_id])
+}
+enum AdStatus {
+  PENDING
+  ACTIVE
+  REJECTED
+  SOLD
+  BOOKED
+  DISABLED
+}
 
 model Booking {
   id         Int           @id @default(autoincrement())
@@ -269,6 +239,7 @@ model Booking {
   to_date    DateTime
   created_at DateTime      @default(now())
   updated_at DateTime      @updatedAt
+  
   ad         D_Vacation    @relation(fields: [ad_id], references: [id], onDelete: Cascade)
   user       Users         @relation("UserBookings", fields: [user_id], references: [id])
 
@@ -277,19 +248,99 @@ model Booking {
   @@index([ad_id])
 }
 
-enum AdStatus {
-  PENDING
-  ACTIVE
-  REJECTED
-  SOLD
-  BOOKED
-  DISABLED
-}
-
 enum BookingStatus {
   PENDING
   BOOKED
   CLIENT_ARRIVED
   CLIENT_LEFT
   CANCELLED
+}
+
+model Sliders {
+  id Int @id @default(autoincrement())
+
+  title       String?
+  description String?
+
+  image String
+
+  link String?
+
+  is_active Boolean @default(true)
+  order     Int?
+
+  created_at DateTime @default(now())
+}
+
+model Categories {
+  id      Int    @id @default(autoincrement())
+  name_en String
+  name_ar String
+
+  subCategories SubCategories[]
+  ads           D_Vacation[]    @relation("CategoryAds")
+}
+model SubCategories {
+  id          Int        @id @default(autoincrement())
+  name_en     String
+  name_ar     String
+  category_id Int
+  category    Categories @relation(fields: [category_id], references: [id])
+  ads D_Vacation[] @relation("SubCategoryAds")
+}
+
+model Countries {
+  id      Int    @id @default(autoincrement())
+  name_en String
+  name_ar String
+
+  governorates Governorates[]
+  ads          D_Vacation[]   @relation("CountryAds")
+}
+model Governorates {
+  id         Int       @id @default(autoincrement())
+  name_en    String
+  name_ar    String
+  country_id Int
+  country    Countries @relation(fields: [country_id], references: [id])
+
+  cities Cities[]
+  ads    D_Vacation[] @relation("GovernorateAds")
+
+  @@index([country_id])
+}
+model Cities {
+  id             Int          @id @default(autoincrement())
+  name_en        String
+  name_ar        String
+  governorate_id Int
+  governorate    Governorates @relation(fields: [governorate_id], references: [id])
+
+  areas Areas[]
+  ads   D_Vacation[] @relation("CityAds")
+
+  @@index([governorate_id])
+}
+model Areas {
+  id      Int    @id @default(autoincrement())
+  name_en String
+  name_ar String
+  city_id Int
+  city    Cities @relation(fields: [city_id], references: [id])
+
+  compounds Compounds[]
+  ads       D_Vacation[] @relation("AreaAds")
+
+  @@index([city_id])
+}
+model Compounds {
+  id      Int    @id @default(autoincrement())
+  name_en String
+  name_ar String
+  area_id Int
+  area    Areas  @relation(fields: [area_id], references: [id])
+
+  ads D_Vacation[] @relation("CompoundAds")
+
+  @@index([area_id])
 }

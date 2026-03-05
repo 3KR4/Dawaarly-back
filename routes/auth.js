@@ -10,9 +10,8 @@ const {
   updateUser,
   deleteUser,
   changePassword,
-  getUserAds,
-  getUserBookings,
-  getAllUsers
+  updatePreferences,
+  getAllUsers,
 } = require("../controllers/authController");
 const { authenticate } = require("../middlewares/authMiddleware");
 
@@ -26,6 +25,7 @@ router.post("/logout", logout);
 
 // User management
 router.put("/user/:userId", authenticate, updateUser);
+router.patch("/preferences", authenticate, updatePreferences);
 router.put("/change-password", authenticate, changePassword);
 router.delete("/delete-user", authenticate, deleteUser);
 

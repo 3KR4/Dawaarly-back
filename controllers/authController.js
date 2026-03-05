@@ -16,15 +16,22 @@ function serializeUser(user) {
     user_type: user.user_type,
     email_verified: user.email_verified,
     phone_verified: user.phone_verified,
-    is_super_admin: user.is_super_admin || false,
+    country_id: user.country_id,
+    governorate_id: user.governorate_id,
+    city_id: user.city_id,
+    language: user.language,
+    theme: user.theme,
   };
+
   if (user.user_type === "subscriber") {
     base.tiktok_link = user.tiktok_link;
     base.facebook_link = user.facebook_link;
     base.subscription_ads_limit = user.subscription_ads_limit || 0;
   } else if (user.user_type === "admin") {
     base.permissions = user.permissions || [];
+    base.is_super_admin = user.is_super_admin || false;
   }
+
   return base;
 }
 
@@ -53,7 +60,19 @@ function createRefreshToken(user) {
 // ----------------------- REGISTER -----------------------
 exports.register = async (req, res) => {
   try {
-    const { full_name, email, password, phone, birth_date, gender } = req.body;
+    const {
+      full_name,
+      email,
+      password,
+      phone,
+      birth_date,
+      gender,
+      country_id,
+      governorate_id,
+      city_id,
+      language,
+      theme,
+    } = req.body;
     if (!full_name || !email || !password || !phone)
       return res.status(400).json({ message: "Missing required fields" });
 
@@ -78,6 +97,14 @@ exports.register = async (req, res) => {
         password: hashedPassword,
         birth_date: birth_date ? new Date(birth_date) : null,
         gender,
+
+        country_id,
+        governorate_id,
+        city_id,
+
+        language: language || "en",
+        theme: theme || "light",
+
         verification_code: verificationCode,
         verification_expiry: new Date(Date.now() + 10 * 60 * 1000),
       },
@@ -282,9 +309,15 @@ exports.updateUser = async (req, res) => {
       tiktok_link,
       facebook_link,
       admin_comment,
-      user_type, // admin / subscriber / user
-      permissions, // array
-      is_super_admin, // boolean
+      user_type,
+      permissions,
+      is_super_admin,
+
+      country_id,
+      governorate_id,
+      city_id,
+      language,
+      theme,
     } = req.body;
 
     const userToUpdate = await prisma.Users.findUnique({
@@ -331,9 +364,19 @@ exports.updateUser = async (req, res) => {
         phone,
         gender,
         birth_date: birth_date ? new Date(birth_date) : undefined,
+
         tiktok_link,
         facebook_link,
+
         admin_comment,
+
+        country_id,
+        governorate_id,
+        city_id,
+
+        language,
+        theme,
+
         ...(requester.is_super_admin && {
           user_type: user_type || userToUpdate.user_type,
           permissions: permissions || userToUpdate.permissions,
@@ -348,6 +391,29 @@ exports.updateUser = async (req, res) => {
     res.json({
       message: "User updated successfully",
       user: serializeUser(updatedUser),
+    });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+exports.updatePreferences = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const { language, theme } = req.body;
+
+    const user = await prisma.Users.update({
+      where: { id: userId },
+      data: {
+        ...(language && { language }),
+        ...(theme && { theme }),
+      },
+    });
+
+    res.json({
+      message: "Preferences updated",
+      user: serializeUser(user),
     });
   } catch (error) {
     console.log(error);
