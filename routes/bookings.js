@@ -1,4 +1,3 @@
-// routes/bookingRoutes.js
 const express = require("express");
 const router = express.Router();
 const { authenticate } = require("../middlewares/authMiddleware");
@@ -14,19 +13,19 @@ const {
 // إنشاء حجز
 router.post("/", authenticate, createBooking);
 
-// تعديل الحجز قبل الموافقة
-router.put("/:bookingId", authenticate, updateBooking);
-
-// تأكيد الحجز من قبل الادمن
+// موافقة الادمن
 router.put("/approve/:bookingId", authenticate, approveBooking);
 
-// تغيير حالة الحجز بعد الموافقة (admin)
+// تغيير الحالة بعد الموافقة
 router.put("/status/:bookingId", authenticate, updateBookingStatus);
 
-// جلب كل الحجوزات لمستخدم
-router.get("/user/:userId", authenticate, getUserBookings);
+// تعديل الحجز
+router.put("/:bookingId", authenticate, updateBooking);
 
-// جلب كل الحجوزات
+// حجوزاتي انا
+router.get("/my-bookings", authenticate, getUserBookings);
+
+// كل الحجوزات (admin فقط يفضل)
 router.get("/", authenticate, getAllBookings);
 
 module.exports = router;

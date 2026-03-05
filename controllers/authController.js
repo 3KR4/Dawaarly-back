@@ -283,7 +283,7 @@ exports.updateUser = async (req, res) => {
       facebook_link,
       admin_comment,
       user_type, // admin / subscriber / user
-      permissions, // array of permissions
+      permissions, // array
       is_super_admin, // boolean
     } = req.body;
 
@@ -296,35 +296,30 @@ exports.updateUser = async (req, res) => {
     const requester = req.user;
 
     // ---------------- قواعد الصلاحيات ----------------
-    if (!requester.is_super_admin) {
-      if (requester.user_type === "admin") {
-        // Admin مش قادر يعدل Admin آخر إلا لو هو سوبر
-        if (
-          userToUpdate.user_type === "admin" &&
-          !userToUpdate.is_super_admin
-        ) {
-          return res
-            .status(403)
-            .json({ message: "Admin cannot edit another admin" });
-        }
-        // Admin عادي مش قادر يغير صلاحيات
-        if (user_type || permissions || is_super_admin !== undefined) {
-          return res
-            .status(403)
-            .json({ message: "You cannot change user_type or permissions" });
-        }
-      } else {
-        // مستخدم عادي يقدر يعدل نفسه فقط
-        if (requester.id !== userToUpdate.id) {
-          return res
-            .status(403)
-            .json({ message: "You can only edit your own profile" });
-        }
-        if (user_type || permissions || is_super_admin !== undefined) {
-          return res
-            .status(403)
-            .json({ message: "You cannot change user_type or permissions" });
-        }
+    if (requester.is_super_admin) {
+      // Super Admin يقدر يعدل أي شيء
+    } else if (requester.user_type === "admin") {
+      // Admin عادي
+      if (userToUpdate.user_type === "admin" || userToUpdate.is_super_admin) {
+        return res.status(403).json({ message: "Cannot edit other admins" });
+      }
+      // Admin عادي مش قادر يغير النوع أو الصلاحيات
+      if (user_type || permissions || is_super_admin !== undefined) {
+        return res
+          .status(403)
+          .json({ message: "Cannot change role or permissions" });
+      }
+    } else {
+      // مستخدم عادي
+      if (requester.id !== userToUpdate.id) {
+        return res
+          .status(403)
+          .json({ message: "You can only edit your own profile" });
+      }
+      if (user_type || permissions || is_super_admin !== undefined) {
+        return res
+          .status(403)
+          .json({ message: "Cannot change role or permissions" });
       }
     }
 
@@ -339,7 +334,6 @@ exports.updateUser = async (req, res) => {
         tiktok_link,
         facebook_link,
         admin_comment,
-        // السوبر أدمن فقط يقدر يغير النوع و الصلاحيات
         ...(requester.is_super_admin && {
           user_type: user_type || userToUpdate.user_type,
           permissions: permissions || userToUpdate.permissions,
@@ -483,37 +477,4 @@ exports.getAllUsers = async (req, res) => {
     console.error(error);
     res.status(500).json({ message: "Server error" });
   }
-};
-
-// جلب إعلانات مستخدم معين
-exports.getUserAds = async (req, res) => {
-  const userId = parseInt(req.params.userId);
-
-  const user = await prisma.Users.findUnique({
-    where: { id: userId },
-    include: { ads: true },
-  });
-
-  if (!user) return res.status(404).json({ message: "User not found" });
-
-  // Admin أو صاحب الحساب فقط
-  if (req.user.id !== userId && req.user.user_type !== "admin")
-    return res.status(403).json({ message: "Forbidden" });
-
-  res.json(user.ads);
-};
-exports.getUserBookings = async (req, res) => {
-  const userId = parseInt(req.params.userId);
-
-  const user = await prisma.Users.findUnique({
-    where: { id: userId },
-    include: { bookings: true },
-  });
-
-  if (!user) return res.status(404).json({ message: "User not found" });
-
-  if (req.user.id !== userId && req.user.user_type !== "admin")
-    return res.status(403).json({ message: "Forbidden" });
-
-  res.json(user.bookings);
 };

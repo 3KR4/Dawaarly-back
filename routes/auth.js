@@ -29,9 +29,6 @@ router.put("/user/:userId", authenticate, updateUser);
 router.put("/change-password", authenticate, changePassword);
 router.delete("/delete-user", authenticate, deleteUser);
 
-// User-specific data
-router.get("/user-bookings/:userId", authenticate, getUserBookings);
-router.get("/user-ads/:userId", authenticate, getUserAds);
 router.get("/all-users", authenticate, getAllUsers);
 
 module.exports = router;

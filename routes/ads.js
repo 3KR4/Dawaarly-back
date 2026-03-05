@@ -10,9 +10,12 @@ const {
   getAllAds,
   addFavorite,
   removeFavorite,
-  addView,
+  getUserAds,
+  getSectionsAds,
 } = require("../controllers/adController");
-const { authorizeOwnerOrSuperAdmin } = require("../middlewares/authorizeOwnerOrSuperAdmin.js");
+const {
+  authorizeOwnerOrSuperAdmin,
+} = require("../middlewares/authorizeOwnerOrSuperAdmin.js");
 const { authorize } = require("../middlewares/authorize.JS");
 
 // Ads CRUD
@@ -23,14 +26,17 @@ router.post(
   createAd,
 );
 router.put("/update/:adId", authenticate, authorizeOwnerOrSuperAdmin, updateAd);
-router.delete("/delete/:adId", authenticate, authorizeOwnerOrSuperAdmin, deleteAd);
+router.delete(
+  "/delete/:adId",
+  authenticate,
+  authorizeOwnerOrSuperAdmin,
+  deleteAd,
+);
 router.patch("/update/:adId/status", authenticate, changeAdStatus);
 
 router.get("/all", getAllAds);
-router.get("/:adId", getAd);
-
-// Interactions
-router.post("/:adId/favorite", authenticate, addFavorite);
-router.delete("/:adId/favorite", authenticate, removeFavorite);
+router.get("/sections", getSectionsAds);
+router.get("/profile/:userId", getUserAds);
+router.get("/:adId", getAd); // 👈 دايماً في الآخر
 
 module.exports = router;

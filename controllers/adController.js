@@ -4,16 +4,71 @@ const cloudinary = require("../utils/cloudinary");
 const { parseAdData } = require("../utils/convertTypes");
 const jwt = require("jsonwebtoken");
 // Validation utility
-const { validateAdDates, validateRentPeriod } = require("../utils/validation");
+const {
+  validateAdDates,
+  validateRentPeriod,
+  validateNumberField,
+} = require("../utils/validation");
+
+// Create Ad
 
 // Create Ad
 exports.createAd = async (req, res) => {
   try {
     const data = req.body;
 
+    // ---------------- Required Fields ----------------
+    const requiredFields = ["title", "categoryId", "governorate_id", "city_id"];
+    for (const field of requiredFields) {
+      if (!data[field]) {
+        return res
+          .status(400)
+          .json({ message: `Field "${field}" is required.` });
+      }
+    }
+
+    // ---------------- Validate Dates ----------------
+    if (data.available_from && data.available_to) {
+      if (!validateAdDates(data.available_from, data.available_to)) {
+        return res
+          .status(400)
+          .json({ message: "Invalid available_from or available_to dates." });
+      }
+    }
+
+    // ---------------- Validate Rent Period ----------------
+    if (data.min_rent_period || data.min_rent_period_unit) {
+      if (
+        !validateRentPeriod(data.min_rent_period, data.min_rent_period_unit)
+      ) {
+        return res
+          .status(400)
+          .json({ message: "Invalid rent period or unit." });
+      }
+    }
+
+    // ---------------- Validate Numeric Fields ----------------
+    const numericFields = [
+      "bedrooms",
+      "bathrooms",
+      "level",
+      "adult_no_max",
+      "child_no_max",
+    ];
+    for (const field of numericFields) {
+      if (
+        data[field] !== undefined &&
+        !validateNumberField(data[field], 0, 100)
+      ) {
+        return res
+          .status(400)
+          .json({ message: `Invalid value for field "${field}".` });
+      }
+    }
+
+    // ---------------- Determine Admin / Subuser ----------------
     const isAdmin =
       req.user?.is_super_admin || req.user?.permissions?.includes("create-ads");
-
     const userData = {};
     if (req.user.user_type === "admin") {
       userData.admin_id = req.user.id;
@@ -21,6 +76,7 @@ exports.createAd = async (req, res) => {
       userData.subuser_id = req.user.id;
     }
 
+    // ---------------- Prepare Ad Data ----------------
     const adData = {
       ...data,
       ...userData,
@@ -28,6 +84,7 @@ exports.createAd = async (req, res) => {
       approved_at: isAdmin ? new Date() : null,
     };
 
+    // ---------------- Create Ad ----------------
     const ad = await prisma.D_Vacation.create({ data: adData });
 
     res.status(201).json({
@@ -44,37 +101,126 @@ exports.updateAd = async (req, res) => {
   try {
     const adId = Number(req.params.adId);
 
+    // 1️⃣ جلب الإعلان الحالي
     const existingAd = await prisma.D_Vacation.findUnique({
       where: { id: adId },
     });
 
     if (!existingAd) return res.status(404).json({ message: "Ad not found" });
 
+    // 2️⃣ التحقق من صلاحيات المستخدم
     const isAdmin =
       req.user?.permissions?.includes("edit-ads") || req.user?.is_super_admin;
     const isOwner =
-      req.ad.admin_id === req.user.id || req.ad.subuser_id === req.user.id;
+      existingAd.admin_id === req.user.id ||
+      existingAd.subuser_id === req.user.id;
+
     if (!isOwner && !isAdmin)
       return res.status(403).json({ message: "Access denied" });
 
-    const filteredData = { ...req.body };
+    // 3️⃣ فلترة البيانات القادمة
+    const {
+      title,
+      description,
+      categoryId,
+      subCategoryId,
+      display_phone,
+      display_whatsapp,
+      display_dawaarly_contact,
+      rent_amount,
+      rent_currency,
+      rent_frequency,
+      deposit_amount,
+      min_rent_period,
+      min_rent_period_unit,
+      available_from,
+      available_to,
+      country_id,
+      governorate_id,
+      city_id,
+      area_id,
+      compound_id,
+      bedrooms,
+      bathrooms,
+      level,
+      adult_no_max,
+      child_no_max,
+      am_seeview,
+      am_pool,
+      am_balcony,
+      am_private_garden,
+      am_kitchen,
+      am_ac,
+      am_heating,
+      am_elevator,
+      am_gym,
+      tags,
+    } = req.body;
 
-    if (filteredData.available_from)
-      filteredData.available_from = new Date(filteredData.available_from);
-
-    if (filteredData.available_to)
-      filteredData.available_to = new Date(filteredData.available_to);
-
-    // 👇 أهم جزء
-    if (!isAdmin && existingAd.status === "ACTIVE") {
-      filteredData.status = "PENDING";
-      filteredData.was_previously_approved = true;
-      filteredData.approved_at = null;
+    const dataToUpdate = {
+      ...(title !== undefined && { title }),
+      ...(description !== undefined && { description }),
+      ...(categoryId !== undefined && { categoryId }),
+      ...(subCategoryId !== undefined && { subCategoryId }),
+      ...(display_phone !== undefined && { display_phone }),
+      ...(display_whatsapp !== undefined && { display_whatsapp }),
+      ...(display_dawaarly_contact !== undefined && {
+        display_dawaarly_contact,
+      }),
+      ...(rent_amount !== undefined && { rent_amount }),
+      ...(rent_currency !== undefined && { rent_currency }),
+      ...(rent_frequency !== undefined && { rent_frequency }),
+      ...(deposit_amount !== undefined && { deposit_amount }),
+      ...(min_rent_period !== undefined && { min_rent_period }),
+      ...(min_rent_period_unit !== undefined && { min_rent_period_unit }),
+      ...(available_from !== undefined && {
+        available_from: new Date(available_from),
+      }),
+      ...(available_to !== undefined && {
+        available_to: new Date(available_to),
+      }),
+      ...(country_id !== undefined && { country_id }),
+      ...(governorate_id !== undefined && { governorate_id }),
+      ...(city_id !== undefined && { city_id }),
+      ...(area_id !== undefined && { area_id }),
+      ...(compound_id !== undefined && { compound_id }),
+      ...(bedrooms !== undefined && { bedrooms }),
+      ...(bathrooms !== undefined && { bathrooms }),
+      ...(level !== undefined && { level }),
+      ...(adult_no_max !== undefined && { adult_no_max }),
+      ...(child_no_max !== undefined && { child_no_max }),
+      ...(am_seeview !== undefined && { am_seeview }),
+      ...(am_pool !== undefined && { am_pool }),
+      ...(am_balcony !== undefined && { am_balcony }),
+      ...(am_private_garden !== undefined && { am_private_garden }),
+      ...(am_kitchen !== undefined && { am_kitchen }),
+      ...(am_ac !== undefined && { am_ac }),
+      ...(am_heating !== undefined && { am_heating }),
+      ...(am_elevator !== undefined && { am_elevator }),
+      ...(am_gym !== undefined && { am_gym }),
+      ...(tags !== undefined && { tags }),
+    };
+    if (!isAdmin && "featured_priority" in req.body) {
+      delete req.body.featured_priority;
     }
 
+    if (isAdmin && "featured_priority" in req.body) {
+      let fp = Number(req.body.featured_priority);
+      if (isNaN(fp) || fp < 1 || fp > 10) {
+        fp = 0;
+      }
+      dataToUpdate.featured_priority = fp;
+    }
+    if (!isAdmin && existingAd.status === "ACTIVE") {
+      dataToUpdate.status = "PENDING";
+      dataToUpdate.was_previously_approved = true;
+      dataToUpdate.approved_at = null;
+    }
+
+    // 5️⃣ تحديث الإعلان
     const updatedAd = await prisma.D_Vacation.update({
       where: { id: adId },
-      data: filteredData,
+      data: dataToUpdate,
     });
 
     res.json({
@@ -220,15 +366,28 @@ exports.changeAdStatus = async (req, res) => {
 // Get single Ad
 const adIncludeRelations = {
   images: true,
-  admin: { select: { id: true, full_name: true, phone: true, email: true } },
+  admin: {
+    select: {
+      id: true,
+      full_name: true,
+      phone: true,
+      email: true,
+      user_type: true,
+    },
+  },
+
   subuser: {
     select: {
       id: true,
       full_name: true,
       phone: true,
-      created_at: true,
-      active_ads_count: true,
       email: true,
+      user_type: true,
+      tiktok_link: true,
+      facebook_link: true,
+      user_verified: true,
+      active_ads_count: true,
+      created_at: true,
     },
   },
   Categories: { select: { id: true, name_en: true, name_ar: true } },
@@ -238,6 +397,53 @@ const adIncludeRelations = {
   city: { select: { id: true, name_en: true, name_ar: true } },
   area: { select: { id: true, name_en: true, name_ar: true } },
   compound: { select: { id: true, name_en: true, name_ar: true } },
+  Booking: {
+    where: {
+      status: { in: ["PENDING", "BOOKED"] },
+    },
+    select: {
+      id: true,
+      from_date: true,
+      to_date: true,
+      status: true,
+    },
+  },
+};
+const adIncludeListRelations = {
+  images: {
+    take: 1,
+    orderBy: { is_cover: "desc" },
+  },
+  city: { select: { id: true, name_en: true, name_ar: true } },
+  governorate: { select: { id: true, name_en: true, name_ar: true } },
+  area: { select: { id: true, name_en: true, name_ar: true } },
+  compound: { select: { id: true, name_en: true, name_ar: true } },
+  Categories: { select: { id: true, name_en: true, name_ar: true } },
+  SubCategories: { select: { id: true, name_en: true, name_ar: true } },
+  admin: {
+    select: {
+      id: true,
+      full_name: true,
+      phone: true,
+      email: true,
+      user_type: true,
+    },
+  },
+
+  subuser: {
+    select: {
+      id: true,
+      full_name: true,
+      phone: true,
+      email: true,
+      user_type: true,
+      tiktok_link: true,
+      facebook_link: true,
+      user_verified: true,
+      active_ads_count: true,
+      created_at: true,
+    },
+  },
 };
 function removeForeignKeys(ad) {
   const {
@@ -255,7 +461,6 @@ function removeForeignKeys(ad) {
   } = ad;
   return cleaned;
 }
-
 // Helper: تحديد حالة الفيفوريت
 async function attachIsFavorite(tx, ad, userId) {
   if (!userId) return false;
@@ -299,7 +504,39 @@ function formatAdResponse(ad) {
     details: unitDetails,
   };
 }
+function formatAdListResponse(ad) {
+  const details = {};
 
+  Object.keys(ad).forEach((key) => {
+    if (["bedrooms", "bathrooms", "level"].includes(key)) {
+      details[key] = ad[key];
+    }
+  });
+
+  const firstImage =
+    ad.images?.find((img) => img.is_cover) || ad.images?.[0] || null;
+
+  return {
+    id: ad.id,
+    title: ad.title,
+    rent_amount: ad.rent_amount,
+    rent_currency: ad.rent_currency,
+    rent_frequency: ad.rent_frequency,
+    status: ad.status,
+    featured_priority: ad.featured_priority,
+    created_at: ad.created_at,
+
+    city: ad.city,
+    governorate: ad.governorate,
+    area: ad.area,
+    compound: ad.compound,
+    Categories: ad.Categories,
+    SubCategories: ad.SubCategories,
+
+    image: firstImage,
+    details,
+  };
+}
 exports.getAllAds = async (req, res) => {
   try {
     const {
@@ -476,7 +713,7 @@ exports.getAllAds = async (req, res) => {
         skip,
         take: limitNumber,
         orderBy: { created_at: "desc" },
-        include: adIncludeRelations,
+        include: adIncludeListRelations,
       }),
 
       prisma.D_Vacation.count({
@@ -486,13 +723,18 @@ exports.getAllAds = async (req, res) => {
 
     const cleanedAds = await Promise.all(
       ads.map(async (ad) => {
+        const favoritesCount = await prisma.adFavorite.count({
+          where: { ad_id: ad.id },
+        });
+
         const isFavorite = await attachIsFavorite(prisma, ad, userId);
-
-        const formattedAd = formatAdResponse(removeForeignKeys(ad));
-
+        const formattedAd = formatAdListResponse(ad); // مش بعد removeForeignKeys
         return {
           ...formattedAd,
           isFavorite,
+          favoritesCount,
+          admin: ad.admin || null,
+          subuser: ad.subuser || null,
         };
       }),
     );
@@ -600,42 +842,27 @@ exports.getAd = async (req, res) => {
       : 0;
 
     // 🔥 نجهز listed_by
-    let listedBy = null;
-
-    if (ad.admin) {
-      listedBy = {
-        type: "admin",
-        id: ad.admin.id,
-        name: process.env.SYSTEM_BRAND_NAME || "Dawaarly",
-        phone: ad.admin.phone,
-      };
-    } else if (ad.subuser) {
-      listedBy = {
-        type: "subscriber",
-        id: ad.subuser.id,
-        name: ad.subuser.full_name,
-        phone: ad.subuser.phone,
-        member_since: ad.subuser.created_at,
-        active_ads_count: activeAdsCount,
-      };
-    }
 
     // 🔥 تنظيف الإعلان
     let cleanedAd = removeForeignKeys(ad);
     cleanedAd = formatAdResponse(cleanedAd);
-
-    // ❌ نشيل admin & subuser نهائيًا
-    delete cleanedAd.admin;
-    delete cleanedAd.subuser;
-
+    const favoritesCount = await prisma.adFavorite.count({
+      where: { ad_id: ad.id },
+    });
     const isFavorite = await attachIsFavorite(prisma, ad, userId);
 
     return res.json({
       ...cleanedAd,
+      admin: ad.admin || null,
+      subuser: ad.subuser
+        ? {
+            ...ad.subuser,
+            active_ads_count: activeAdsCount,
+          }
+        : null,
       isFavorite,
-      listed_by: listedBy,
+      favoritesCount,
     });
-
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Server Error" });
@@ -645,7 +872,19 @@ exports.getSectionsAds = async (req, res) => {
   try {
     const { type, value, page = 1, limit = 10 } = req.query;
 
-    const skip = (page - 1) * limit;
+    const pageNumber = Number(page);
+    const limitNumber = Number(limit);
+    const skip = (pageNumber - 1) * limitNumber;
+
+    const allowedTypes = ["category", "city", "subCategory", "governorate"];
+
+    if (type && !allowedTypes.includes(type)) {
+      return res.status(400).json({ message: "Invalid type" });
+    }
+
+    if (type && !value) {
+      return res.status(400).json({ message: "Value is required with type" });
+    }
 
     const where = {
       status: "ACTIVE",
@@ -662,33 +901,48 @@ exports.getSectionsAds = async (req, res) => {
     if (type === "governorate") {
       where.governorate_id = Number(value);
     }
+    if (type === "city") {
+      where.city_id = Number(value);
+    }
 
     const ads = await prisma.D_Vacation.findMany({
       where,
-      skip: Number(skip),
-      take: Number(limit),
+      skip,
+      take: limitNumber,
       orderBy: { featured_priority: "desc" },
-      include: {
-        images: true,
-      },
+      include: adIncludeListRelations,
     });
 
-    res.json(ads);
+    const formatted = ads.map((ad) =>
+      formatAdListResponse(removeForeignKeys(ad)),
+    );
+
+    res.json({
+      data: formatted,
+      pagination: {
+        page: pageNumber,
+        limit: limitNumber,
+        count: formatted.length,
+      },
+    });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ message: "Server Error" });
   }
 };
-exports.getMyAds = async (req, res) => {
+exports.getUserAds = async (req, res) => {
   try {
-    const { page = 1, limit = 10, status } = req.query;
+    const { userId } = req.params;
+    const { page = 1, limit = 10 } = req.query;
 
     const pageNumber = Number(page);
     const limitNumber = Number(limit);
     const skip = (pageNumber - 1) * limitNumber;
 
+    // نجيب كل الاعلانات الخاصة باليوزر سواء admin او subuser
     const whereCondition = {
-      OR: [{ admin_id: req.user.id }, { subuser_id: req.user.id }],
-      ...(status ? { status } : {}),
+      OR: [{ admin_id: Number(userId) }, { subuser_id: Number(userId) }],
+      status: "ACTIVE", // بس الاعلانات النشطة
     };
 
     const [ads, totalCount] = await Promise.all([
@@ -697,15 +951,15 @@ exports.getMyAds = async (req, res) => {
         skip,
         take: limitNumber,
         orderBy: { created_at: "desc" },
+        include: adIncludeListRelations,
       }),
-
-      prisma.D_Vacation.count({
-        where: whereCondition,
-      }),
+      prisma.D_Vacation.count({ where: whereCondition }),
     ]);
 
+    const cleanedAds = ads.map((ad) => formatAdListResponse(ad));
+
     res.json({
-      data: ads,
+      data: cleanedAds,
       pagination: {
         total: totalCount,
         page: pageNumber,
@@ -714,31 +968,144 @@ exports.getMyAds = async (req, res) => {
       },
     });
   } catch (error) {
-    res.status(500).json({ message: "Server Error" });
+    console.error(error);
+    res.status(500).json({ message: "Server Error", error: error.message });
   }
 };
-// Favorites
-exports.addFavorite = async (req, res) => {
+
+exports.toggleFavorite = async (req, res) => {
   try {
-    const { adId } = req.params;
-    const fav = await prisma.adFavorite.create({
-      data: { ad_id: Number(adId), user_id: req.user.id },
+    const userId = req.user.id;
+    const adId = Number(req.params.adId);
+
+    // التأكد من وجود الإعلان
+    const ad = await prisma.d_Vacation.findUnique({ where: { id: adId } });
+    if (!ad) return res.status(404).json({ message: "Ad not found" });
+
+    // نتحقق هل الإعلان موجود في المفضلة
+    const existing = await prisma.adFavorite.findUnique({
+      where: { ad_id_user_id: { ad_id: adId, user_id: userId } },
     });
-    res.json(fav);
+
+    let message;
+    if (existing) {
+      // لو موجود، نحذفه
+      await prisma.adFavorite.delete({
+        where: { ad_id_user_id: { ad_id: adId, user_id: userId } },
+      });
+      message = "Removed from favorites";
+    } else {
+      // لو مش موجود، نضيفه
+      await prisma.adFavorite.create({
+        data: { ad_id: adId, user_id: userId },
+      });
+      message = "Added to favorites";
+    }
+
+    // تحديث عدد المفضلات في الإعلان
+    const favoritesCount = await prisma.adFavorite.count({
+      where: { ad_id: adId },
+    });
+
+    res.json({ message, favoritesCount });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: "Server Error" });
+    res.status(500).json({ message: "Server error" });
   }
 };
-exports.removeFavorite = async (req, res) => {
+exports.getFavorites = async (req, res) => {
   try {
-    const { adId } = req.params;
-    const fav = await prisma.adFavorite.delete({
-      where: { ad_id_user_id: { ad_id: Number(adId), user_id: req.user.id } },
+    const userId = req.user.id;
+    const { page = 1, limit = 10 } = req.query;
+
+    const pageNumber = Number(page);
+    const limitNumber = Number(limit);
+    const skip = (pageNumber - 1) * limitNumber;
+
+    // نجيب المفضلات مع الإعلان بدون take/orderBy في images
+    const [favorites, totalCount] = await Promise.all([
+      prisma.adFavorite.findMany({
+        where: { user_id: userId },
+        skip,
+        take: limitNumber,
+        orderBy: { id: "desc" },
+        include: {
+          ad: {
+            include: {
+              images: true, // هنا كله
+              city: { select: { id: true, name_en: true, name_ar: true } },
+              governorate: {
+                select: { id: true, name_en: true, name_ar: true },
+              },
+              area: { select: { id: true, name_en: true, name_ar: true } },
+              compound: { select: { id: true, name_en: true, name_ar: true } },
+              Categories: {
+                select: { id: true, name_en: true, name_ar: true },
+              },
+              SubCategories: {
+                select: { id: true, name_en: true, name_ar: true },
+              },
+              admin: {
+                select: {
+                  id: true,
+                  full_name: true,
+                  phone: true,
+                  email: true,
+                  user_type: true,
+                },
+              },
+              subuser: {
+                select: {
+                  id: true,
+                  full_name: true,
+                  phone: true,
+                  email: true,
+                  user_type: true,
+                  tiktok_link: true,
+                  facebook_link: true,
+                  user_verified: true,
+                  active_ads_count: true,
+                  created_at: true,
+                },
+              },
+            },
+          },
+        },
+      }),
+      prisma.adFavorite.count({ where: { user_id: userId } }),
+    ]);
+
+    // تنسيق الإعلانات
+    const cleanedFavorites = favorites.map((fav) => {
+      const ad = fav.ad;
+      const isFavorite = true;
+
+      // نجيب أول صورة cover أو أول صورة متاحة
+      let firstImage = null;
+      if (ad.images && ad.images.length > 0) {
+        firstImage = ad.images.find((img) => img.is_cover) || ad.images[0];
+      }
+
+      return {
+        ...formatAdListResponse({
+          ...ad,
+          images: firstImage ? [firstImage] : [],
+        }),
+        isFavorite,
+      };
     });
-    res.json(fav);
+
+    res.json({
+      data: cleanedFavorites,
+      pagination: {
+        total: totalCount,
+        page: pageNumber,
+        limit: limitNumber,
+        totalPages: Math.ceil(totalCount / limitNumber),
+      },
+    });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: "Server Error" });
+    res.status(500).json({ message: "Server error", error: err.message });
   }
 };
