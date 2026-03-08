@@ -2,39 +2,22 @@ const { PrismaClient } = require("@prisma/client");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const { sendVerificationEmail } = require("../utils/sendEmail");
+const rateLimit = require("express-rate-limit");
+const helmet = require("helmet");
+
 const prisma = new PrismaClient();
 
-function serializeUser(user) {
-  const base = {
-    id: user.id,
-    full_name: user.full_name,
-    email: user.email,
-    phone: user.phone,
-    gender: user.gender,
-    birth_date: user.birth_date,
-    created_at: user.created_at,
-    user_type: user.user_type,
-    email_verified: user.email_verified,
-    phone_verified: user.phone_verified,
-    country_id: user.country_id,
-    governorate_id: user.governorate_id,
-    city_id: user.city_id,
-    language: user.language,
-    theme: user.theme,
-  };
-
-  if (user.user_type === "subscriber") {
-    base.tiktok_link = user.tiktok_link;
-    base.facebook_link = user.facebook_link;
-    base.subscription_ads_limit = user.subscription_ads_limit || 0;
-  } else if (user.user_type === "admin") {
-    base.permissions = user.permissions || [];
-    base.is_super_admin = user.is_super_admin || false;
-  }
-
-  return base;
-}
-
+// Rate limiter للـ auth endpoints
+const authLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 دقيقة
+  max: 5, // 5 طلبات لكل IP
+  message: { message: "Too many requests, please try again later" },
+});
+const otpLimiter = rateLimit({
+  windowMs: 60 * 1000, // دقيقة
+  max: 3, // 3 محاولات فقط
+  message: { message: "Too many OTP attempts, try again later" },
+});
 // ----------------------- Helper Tokens -----------------------
 function createAccessToken(user) {
   return jwt.sign(
@@ -45,21 +28,67 @@ function createAccessToken(user) {
       is_super_admin: user.is_super_admin || false,
     },
     process.env.JWT_SECRET,
-    { expiresIn: "7d" }, // access token قصير
+    { expiresIn: "7d" },
   );
 }
 
 function createRefreshToken(user) {
-  return jwt.sign(
-    { id: user.id },
-    process.env.JWT_REFRESH_SECRET,
-    { expiresIn: "7d" }, // refresh token أطول
-  );
+  return jwt.sign({ id: user.id }, process.env.JWT_REFRESH_SECRET, {
+    expiresIn: "7d",
+  });
 }
 
+// ----------------------- Serialize -----------------------
+async function serializeUser(user) {
+  // جلب الـ objects من قاعدة البيانات
+  const [country, governorate, city] = await Promise.all([
+    user.country_id
+      ? prisma.Countries.findUnique({ where: { id: user.country_id } })
+      : null,
+    user.governorate_id
+      ? prisma.Governorates.findUnique({ where: { id: user.governorate_id } })
+      : null,
+    user.city_id
+      ? prisma.Cities.findUnique({ where: { id: user.city_id } })
+      : null,
+  ]);
+
+  return {
+    id: user.id,
+    full_name: user.full_name,
+    email: user.email,
+    phone: user.phone,
+    gender: user.gender,
+    birth_date: user.birth_date,
+    created_at: user.created_at,
+    user_type: user.user_type,
+    email_verified: user.email_verified,
+    phone_verified: user.phone_verified,
+    country: country || null,
+    governorate: governorate || null,
+    city: city || null,
+    language: user.language,
+    theme: user.theme,
+    interests: user.interests || [],
+
+    // لو مستخدم SUBUSER
+    ...(user.user_type === "SUBUSER" && {
+      tiktok_link: user.tiktok_link,
+      facebook_link: user.facebook_link,
+      subscription_ads_limit: user.subscription_ads_limit || 0,
+    }),
+
+    // لو مستخدم ADMIN
+    ...(user.user_type === "ADMIN" && {
+      permissions: user.permissions || [],
+      is_super_admin: user.is_super_admin || false,
+    }),
+  };
+}
 // ----------------------- REGISTER -----------------------
-exports.register = async (req, res) => {
-  try {
+exports.register = [
+  authLimiter,
+  async (req, res) => {
     const {
       full_name,
       email,
@@ -72,7 +101,9 @@ exports.register = async (req, res) => {
       city_id,
       language,
       theme,
+      interests,
     } = req.body;
+
     if (!full_name || !email || !password || !phone)
       return res.status(400).json({ message: "Missing required fields" });
 
@@ -85,11 +116,12 @@ exports.register = async (req, res) => {
       return res.status(400).json({ message: "Phone already exists" });
 
     const hashedPassword = await bcrypt.hash(password, 10);
+
     const verificationCode = Math.floor(
       100000 + Math.random() * 900000,
     ).toString();
 
-    const user = await prisma.Users.create({
+    await prisma.Users.create({
       data: {
         full_name,
         email,
@@ -97,14 +129,12 @@ exports.register = async (req, res) => {
         password: hashedPassword,
         birth_date: birth_date ? new Date(birth_date) : null,
         gender,
-
         country_id,
         governorate_id,
         city_id,
-
         language: language || "en",
         theme: theme || "light",
-
+        interests: interests || [],
         verification_code: verificationCode,
         verification_expiry: new Date(Date.now() + 10 * 60 * 1000),
       },
@@ -112,42 +142,20 @@ exports.register = async (req, res) => {
 
     await sendVerificationEmail(email, verificationCode);
 
-    const accessToken = createAccessToken(user);
-    const refreshToken = createRefreshToken(user);
-
-    await prisma.RefreshToken.create({
-      data: {
-        token: refreshToken,
-        userId: user.id,
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-      },
-    });
-
-    // Set refresh token in HTTP-only cookie
-    res.cookie("refreshToken", refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
-
     res.status(201).json({
-      message: "User created, verify email",
-      accessToken,
-      user: serializeUser(user),
+      message: "User created. Please verify your email.",
     });
-  } catch (error) {
-    console.log(error);
-    res.status(500).json({ message: "Server error" });
-  }
-};
+  },
+];
 
 // ----------------------- LOGIN -----------------------
-exports.login = async (req, res) => {
-  try {
+exports.login = [
+  authLimiter,
+  async (req, res) => {
     const { email, password } = req.body;
+
     const user = await prisma.Users.findUnique({ where: { email } });
-    if (!user) return res.status(404).json({ message: "User not found" });
+    if (!user) return res.status(404).json({ message: "Invalid credentials" });
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch)
@@ -157,26 +165,30 @@ exports.login = async (req, res) => {
       const verificationCode = Math.floor(
         100000 + Math.random() * 900000,
       ).toString();
-      const expiry = new Date(Date.now() + 10 * 60 * 1000);
+
       await prisma.Users.update({
         where: { email },
         data: {
           verification_code: verificationCode,
-          verification_expiry: expiry,
+          verification_expiry: new Date(Date.now() + 10 * 60 * 1000),
         },
       });
+
       await sendVerificationEmail(email, verificationCode);
-      return res
-        .status(403)
-        .json({ message: "Email not verified. OTP resent." });
+
+      return res.status(403).json({
+        message: "Email not verified. Verification code sent again.",
+      });
     }
 
     const accessToken = createAccessToken(user);
     const refreshToken = createRefreshToken(user);
 
+    const hashedToken = await bcrypt.hash(refreshToken, 10);
+
     await prisma.RefreshToken.create({
       data: {
-        token: refreshToken,
+        token: hashedToken,
         userId: user.id,
         expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
       },
@@ -189,12 +201,12 @@ exports.login = async (req, res) => {
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
-    res.json({ accessToken, user: serializeUser(user) });
-  } catch (error) {
-    console.log(error);
-    res.status(500).json({ message: "Server error" });
-  }
-};
+    res.json({
+      accessToken,
+      user: await serializeUser(user),
+    });
+  },
+];
 
 // ----------------------- REFRESH TOKEN -----------------------
 exports.refreshToken = async (req, res) => {
@@ -202,7 +214,23 @@ exports.refreshToken = async (req, res) => {
     const token = req.cookies.refreshToken;
     if (!token) return res.status(401).json({ message: "No refresh token" });
 
-    const dbToken = await prisma.RefreshToken.findUnique({ where: { token } });
+    const tokens = await prisma.RefreshToken.findMany({
+      where: { userId: decoded.id },
+    });
+
+    let validToken = null;
+
+    for (const t of tokens) {
+      const isMatch = await bcrypt.compare(token, t.token);
+      if (isMatch) {
+        validToken = t;
+        break;
+      }
+    }
+
+    if (!validToken)
+      return res.status(403).json({ message: "Invalid refresh token" });
+
     if (!dbToken)
       return res.status(403).json({ message: "Invalid refresh token" });
 
@@ -237,214 +265,273 @@ exports.logout = async (req, res) => {
   }
 };
 
-exports.verifyEmail = async (req, res) => {
-  const { email, code } = req.body;
-
-  const user = await prisma.Users.findUnique({ where: { email } });
-
-  if (!user) return res.status(404).json({ message: "User not found" });
-
-  if (user.verification_code !== code || new Date() > user.verification_expiry)
-    return res.status(400).json({ message: "Invalid or expired code" });
-
-  await prisma.Users.update({
-    where: { email },
-    data: {
-      email_verified: true,
-      verification_code: null,
-      verification_expiry: null,
-    },
-  });
-
-  res.json({ message: "Email verified successfully" });
-};
-exports.resendOTP = async (req, res) => {
-  try {
-    const { email } = req.body;
+exports.verifyEmail = [
+  otpLimiter,
+  async (req, res) => {
+    const { email, code } = req.body;
 
     const user = await prisma.Users.findUnique({ where: { email } });
 
     if (!user) return res.status(404).json({ message: "User not found" });
-    if (user.email_verified)
-      return res.status(400).json({ message: "Email already verified" });
 
-    const now = new Date();
-    if (user.last_otp_sent_at && now - user.last_otp_sent_at < 60 * 1000) {
-      // لو محاولش قبل 60 ثانية
-      return res
-        .status(429)
-        .json({ message: "Wait before requesting OTP again" });
-    }
+    if (
+      user.verification_code !== code ||
+      new Date() > user.verification_expiry
+    )
+      return res.status(400).json({ message: "Invalid or expired code" });
 
-    const verificationCode = Math.floor(
-      100000 + Math.random() * 900000,
-    ).toString();
-    const expiry = new Date(Date.now() + 10 * 60 * 1000); // 10 دقايق
-
-    await prisma.Users.update({
+    const updatedUser = await prisma.Users.update({
       where: { email },
       data: {
-        verification_code: verificationCode,
-        verification_expiry: expiry,
-        last_otp_sent_at: now,
+        email_verified: true,
+        verification_code: null,
+        verification_expiry: null,
       },
     });
 
-    await sendVerificationEmail(email, verificationCode);
+    const accessToken = createAccessToken(updatedUser);
+    const refreshToken = createRefreshToken(updatedUser);
 
-    res.json({ message: "OTP resent successfully" });
-  } catch (error) {
-    console.log(error);
-    res.status(500).json({ message: "Server error" });
-  }
-};
-exports.updateUser = async (req, res) => {
+    const hashedToken = await bcrypt.hash(refreshToken, 10);
+
+    await prisma.RefreshToken.create({
+      data: {
+        token: hashedToken,
+        userId: updatedUser.id,
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      },
+    });
+
+    res.cookie("refreshToken", refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+
+    res.json({
+      message: "Email verified successfully",
+      accessToken,
+      user: await serializeUser(updatedUser),
+    });
+  },
+];
+exports.resendOTP = [
+  otpLimiter,
+  async (req, res) => {
+    try {
+      const { email } = req.body;
+
+      const user = await prisma.Users.findUnique({ where: { email } });
+
+      if (!user) return res.status(404).json({ message: "User not found" });
+      if (user.email_verified)
+        return res.status(400).json({ message: "Email already verified" });
+
+      const now = new Date();
+      if (user.last_otp_sent_at && now - user.last_otp_sent_at < 60 * 1000) {
+        // لو محاولش قبل 60 ثانية
+        return res
+          .status(429)
+          .json({ message: "Wait before requesting OTP again" });
+      }
+
+      const verificationCode = Math.floor(
+        100000 + Math.random() * 900000,
+      ).toString();
+      const expiry = new Date(Date.now() + 10 * 60 * 1000); // 10 دقايق
+
+      await prisma.Users.update({
+        where: { email },
+        data: {
+          verification_code: verificationCode,
+          verification_expiry: expiry,
+          last_otp_sent_at: now,
+        },
+      });
+
+      await sendVerificationEmail(email, verificationCode);
+
+      res.json({ message: "OTP resent successfully" });
+    } catch (error) {
+      console.log(error);
+      res.status(500).json({ message: "Server error" });
+    }
+  },
+];
+exports.updateProfile = async (req, res) => {
   try {
-    const { userId } = req.params;
+    const userId = req.user.id;
+
     const {
       full_name,
       phone,
-      gender,
       birth_date,
-      tiktok_link,
-      facebook_link,
-      admin_comment,
-      user_type,
-      permissions,
-      is_super_admin,
-
+      gender,
       country_id,
       governorate_id,
       city_id,
       language,
       theme,
+      interests,
     } = req.body;
 
-    const userToUpdate = await prisma.Users.findUnique({
-      where: { id: parseInt(userId) },
-    });
-    if (!userToUpdate)
-      return res.status(404).json({ message: "User not found" });
-
-    const requester = req.user;
-
-    // ---------------- قواعد الصلاحيات ----------------
-    if (requester.is_super_admin) {
-      // Super Admin يقدر يعدل أي شيء
-    } else if (requester.user_type === "admin") {
-      // Admin عادي
-      if (userToUpdate.user_type === "admin" || userToUpdate.is_super_admin) {
-        return res.status(403).json({ message: "Cannot edit other admins" });
-      }
-      // Admin عادي مش قادر يغير النوع أو الصلاحيات
-      if (user_type || permissions || is_super_admin !== undefined) {
-        return res
-          .status(403)
-          .json({ message: "Cannot change role or permissions" });
-      }
-    } else {
-      // مستخدم عادي
-      if (requester.id !== userToUpdate.id) {
-        return res
-          .status(403)
-          .json({ message: "You can only edit your own profile" });
-      }
-      if (user_type || permissions || is_super_admin !== undefined) {
-        return res
-          .status(403)
-          .json({ message: "Cannot change role or permissions" });
-      }
-    }
-
-    // ---------------- تحديث البيانات ----------------
-    const updatedUser = await prisma.Users.update({
-      where: { id: parseInt(userId) },
+    const user = await prisma.Users.update({
+      where: { id: userId },
       data: {
         full_name,
         phone,
         gender,
         birth_date: birth_date ? new Date(birth_date) : undefined,
-
-        tiktok_link,
-        facebook_link,
-
-        admin_comment,
-
         country_id,
         governorate_id,
         city_id,
-
         language,
         theme,
-
-        ...(requester.is_super_admin && {
-          user_type: user_type || userToUpdate.user_type,
-          permissions: permissions || userToUpdate.permissions,
-          is_super_admin:
-            is_super_admin !== undefined
-              ? is_super_admin
-              : userToUpdate.is_super_admin,
-        }),
+        interests,
       },
     });
 
     res.json({
-      message: "User updated successfully",
-      user: serializeUser(updatedUser),
+      message: "Profile updated",
+      user: await serializeUser(user),
     });
   } catch (error) {
-    console.log(error);
     res.status(500).json({ message: "Server error" });
   }
 };
-exports.updatePreferences = async (req, res) => {
+exports.updateSubuserProfile = async (req, res) => {
   try {
     const userId = req.user.id;
 
-    const { language, theme } = req.body;
+    const user = await prisma.Users.findUnique({
+      where: { id: userId },
+    });
 
-    const user = await prisma.Users.update({
+    if (user.user_type !== "SUBUSER")
+      return res.status(403).json({ message: "Only subusers can update this" });
+
+    const { facebook_link, tiktok_link } = req.body;
+
+    const updated = await prisma.Users.update({
       where: { id: userId },
       data: {
-        ...(language && { language }),
-        ...(theme && { theme }),
+        facebook_link,
+        tiktok_link,
       },
     });
 
     res.json({
-      message: "Preferences updated",
-      user: serializeUser(user),
+      message: "Updated",
+      user: await serializeUser(updated),
     });
-  } catch (error) {
-    console.log(error);
+  } catch (e) {
+    res.status(500).json({ message: "Server error" });
+  }
+};
+exports.changeUserRole = async (req, res) => {
+  try {
+    const requester = req.user;
+
+    if (!requester.is_super_admin)
+      return res.status(403).json({ message: "Super admin only" });
+
+    const userId = Number(req.params.id);
+    const { user_type } = req.body;
+
+    const user = await prisma.Users.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    if (user.user_type === "SUBUSER")
+      return res.status(400).json({
+        message: "Subuser role cannot be changed",
+      });
+
+    const updated = await prisma.Users.update({
+      where: { id: userId },
+      data: { user_type },
+    });
+
+    res.json({
+      message: `Role updated to: ${user_type}`,
+    });
+  } catch (e) {
+    res.status(500).json({ message: "Server error" });
+  }
+};
+exports.updatePermissions = async (req, res) => {
+  try {
+    const requester = req.user;
+
+    if (!requester.is_super_admin)
+      return res.status(403).json({ message: "Super admin only" });
+
+    const userId = Number(req.params.id);
+    const { permissions } = req.body;
+
+    const user = await prisma.Users.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    if (user.user_type !== "ADMIN")
+      return res.status(400).json({
+        message: "Permissions only for admins",
+      });
+
+    const updated = await prisma.Users.update({
+      where: { id: userId },
+      data: { permissions },
+    });
+
+    res.json({
+      message: "Permissions updated",
+      user: await serializeUser(updated),
+    });
+  } catch (e) {
     res.status(500).json({ message: "Server error" });
   }
 };
 exports.deleteUser = async (req, res) => {
   try {
-    const { userId } = req.body;
+    const id = Number(req.params.userId);
+
+    if (isNaN(id)) {
+      return res.status(400).json({ message: "Invalid user id" });
+    }
+
     const userToDelete = await prisma.Users.findUnique({
-      where: { id: parseInt(userId) },
+      where: { id },
     });
+
     if (!userToDelete)
       return res.status(404).json({ message: "User not found" });
 
     const requester = req.user;
 
+    // منع حذف السوبر ادمن
+    if (userToDelete.is_super_admin) {
+      return res.status(403).json({
+        message: "Super admin cannot be deleted",
+      });
+    }
+
+    // ---------------- صلاحيات الحذف ----------------
+
     if (!requester.is_super_admin) {
-      if (requester.user_type === "admin") {
-        // Admin مش قادر يحذف Admin آخر أو SuperAdmin
-        if (
-          (userToDelete.user_type === "admin" &&
-            !userToDelete.is_super_admin) ||
-          userToDelete.is_super_admin
-        ) {
+      // Admin عادي
+      if (requester.user_type === "ADMIN") {
+        if (userToDelete.user_type === "ADMIN") {
           return res
             .status(403)
-            .json({ message: "Admin cannot delete this user" });
+            .json({ message: "Admin cannot delete another admin" });
         }
       } else {
-        // user أو subscriber يحذف نفسه فقط
+        // مستخدم عادي
         if (requester.id !== userToDelete.id) {
           return res
             .status(403)
@@ -453,7 +540,16 @@ exports.deleteUser = async (req, res) => {
       }
     }
 
-    await prisma.Users.delete({ where: { id: parseInt(userId) } });
+    // حذف refresh tokens
+    await prisma.RefreshToken.deleteMany({
+      where: { userId: userToDelete.id },
+    });
+
+    // حذف المستخدم
+    await prisma.Users.delete({
+      where: { id: userToDelete.id },
+    });
+
     res.json({ message: "User deleted successfully" });
   } catch (error) {
     console.log(error);
@@ -462,10 +558,12 @@ exports.deleteUser = async (req, res) => {
 };
 exports.changePassword = async (req, res) => {
   try {
-    const { email, old_password, new_password } = req.body;
+    const userId = req.user.id;
+    const { old_password, new_password } = req.body;
 
-    const user = await prisma.Users.findUnique({ where: { email } });
-    if (!user) return res.status(404).json({ message: "User not found" });
+    const user = await prisma.Users.findUnique({
+      where: { id: userId },
+    });
 
     const isMatch = await bcrypt.compare(old_password, user.password);
     if (!isMatch)
@@ -474,36 +572,56 @@ exports.changePassword = async (req, res) => {
     const hashedNewPassword = await bcrypt.hash(new_password, 10);
 
     await prisma.Users.update({
-      where: { email },
+      where: { id: userId },
       data: { password: hashedNewPassword },
     });
 
     res.json({ message: "Password changed successfully" });
   } catch (error) {
-    console.log(error);
     res.status(500).json({ message: "Server error" });
   }
 };
 exports.getAllUsers = async (req, res) => {
   try {
     const requester = req.user;
-    if (requester.user_type !== "admin" && !requester.is_super_admin) {
+
+    if (requester.user_type !== "ADMIN" && !requester.is_super_admin) {
       return res.status(403).json({ message: "Forbidden: Admins only" });
     }
 
-    let { user_type, search, page, limit } = req.query;
+    let { user_type, permissions, search, page, limit } = req.query;
+
     page = parseInt(page) || 1;
     limit = parseInt(limit) || 10;
+
     const skip = (page - 1) * limit;
 
     const where = {};
-    if (user_type) where.user_type = user_type;
-    if (search) where.full_name = { contains: search, mode: "insensitive" };
 
-    // إجمالي عدد المستخدمين
+    // فلتر نوع المستخدم (قيمة واحدة)
+    if (user_type) {
+      where.user_type = user_type;
+    }
+
+    // فلتر الاسم
+    if (search) {
+      where.full_name = {
+        contains: search,
+        mode: "insensitive",
+      };
+    }
+
+    // فلتر الصلاحيات (أكثر من قيمة)
+    if (permissions) {
+      const permsArray = permissions.split(",");
+
+      where.permissions = {
+        hasSome: permsArray,
+      };
+    }
+
     const total = await prisma.Users.count({ where });
 
-    // جلب المستخدمين بدون الاعتماد على include.ads
     const users = await prisma.Users.findMany({
       where,
       skip,
@@ -511,8 +629,8 @@ exports.getAllUsers = async (req, res) => {
       orderBy: { created_at: "desc" },
     });
 
-    // جلب عدد الإعلانات النشطة لكل مستخدم دفعة واحدة
     const userIds = users.map((u) => u.id);
+
     const activeAdsCounts = await prisma.D_Vacation.groupBy({
       by: ["admin_id"],
       where: {
@@ -523,14 +641,18 @@ exports.getAllUsers = async (req, res) => {
     });
 
     const countsMap = {};
-    activeAdsCounts.forEach((c) => (countsMap[c.admin_id] = c._count.id));
 
-    // تسلسل المستخدمين
-    const serializedUsers = users.map((u) => {
-      const base = serializeUser(u);
-      base.active_ads_count = countsMap[u.id] || 0;
-      return base;
+    activeAdsCounts.forEach((c) => {
+      countsMap[c.admin_id] = c._count.id;
     });
+
+    const serializedUsers = await Promise.all(
+      users.map(async (u) => {
+        const base = await serializeUser(u);
+        base.active_ads_count = countsMap[u.id] || 0;
+        return base;
+      }),
+    );
 
     res.json({
       page,

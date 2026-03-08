@@ -3,13 +3,12 @@ const prisma = new PrismaClient();
 
 exports.createSlider = async (req, res) => {
   try {
-    const { title, description, image, link } = req.body;
+    const { title, description, link } = req.body;
 
     const slider = await prisma.Sliders.create({
       data: {
         title,
         description,
-        image,
         link,
       },
     });
@@ -25,13 +24,33 @@ exports.createSlider = async (req, res) => {
 exports.updateSlider = async (req, res) => {
   try {
     const { id } = req.params;
+    const { title, description, link, is_active } = req.body;
 
-    const slider = await prisma.Sliders.update({
-      where: { id: Number(id) },
-      data: req.body,
+    const sliderId = Number(id);
+
+    // التأكد إن السلايدر موجود
+    const existingSlider = await prisma.Sliders.findUnique({
+      where: { id: sliderId },
     });
 
-    res.json(slider);
+    if (!existingSlider) {
+      return res.status(404).json({
+        message: "Slider not found",
+      });
+    }
+
+    // تحديث السلايدر
+    const updatedSlider = await prisma.Sliders.update({
+      where: { id: sliderId },
+      data: {
+        title,
+        description,
+        link,
+        is_active,
+      },
+    });
+
+    res.status(200).json(updatedSlider);
   } catch (error) {
     res.status(500).json({
       message: "Server error",
@@ -67,23 +86,32 @@ exports.getSliders = async (req, res) => {
       orderBy: {
         created_at: "desc",
       },
-      include: {
-        images: {
-          where: {
-            entity_type: "SLIDER", // نوع الكيان
-          },
-          orderBy: {
-            order: "asc", // لو عايز الصور بالترتيب
-          },
+    });
+
+    const sliderIds = sliders.map((s) => s.id);
+
+    const images = await prisma.Images.findMany({
+      where: {
+        entity_type: "SLIDER",
+        entity_id: {
+          in: sliderIds,
         },
+      },
+      orderBy: {
+        order: "asc",
       },
     });
 
-    // لو تحب نجيب أول صورة فقط لكل slider:
-    const formatted = sliders.map((slider) => ({
-      ...slider,
-      image: slider.images[0] || null, // أول صورة
-    }));
+    const formatted = sliders.map((slider) => {
+      const sliderImages = images.filter(
+        (img) => img.entity_id === slider.id
+      );
+
+      return {
+        ...slider,
+        image: sliderImages[0] || null,
+      };
+    });
 
     res.json(formatted);
   } catch (error) {

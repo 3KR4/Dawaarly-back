@@ -66,22 +66,28 @@ exports.createAd = async (req, res) => {
       }
     }
 
-    // ---------------- Determine Admin / Subuser ----------------
-    const isAdmin =
-      req.user?.is_super_admin || req.user?.permissions?.includes("create-ads");
+    // 🔥 FIX: ربط المستخدم بالحقل الصحيح
     const userData = {};
-    if (req.user.user_type === "admin") {
+    if (req.user.user_type === "ADMIN") {
       userData.admin_id = req.user.id;
-    } else {
+    } else if (req.user.user_type === "SUBUSER") {
       userData.subuser_id = req.user.id;
     }
+
+    // ---------------- Determine Status ----------------
+    const isAdmin =
+      req.user?.is_super_admin || req.user?.permissions?.includes("create-ads");
+
+    // 🔥 FIX: تعيين approved_at تلقائياً إذا كان الحالة ACTIVE
+    const status = isAdmin ? "ACTIVE" : "PENDING";
+    const status_changed_at = isAdmin ? new Date() : null;
 
     // ---------------- Prepare Ad Data ----------------
     const adData = {
       ...data,
       ...userData,
-      status: isAdmin ? "ACTIVE" : "PENDING",
-      approved_at: isAdmin ? new Date() : null,
+      status,
+      status_changed_at,
     };
 
     // ---------------- Create Ad ----------------
@@ -100,17 +106,14 @@ exports.createAd = async (req, res) => {
 exports.updateAd = async (req, res) => {
   try {
     const adId = Number(req.params.adId);
-
-    // 1️⃣ جلب الإعلان الحالي
     const existingAd = await prisma.D_Vacation.findUnique({
       where: { id: adId },
     });
 
     if (!existingAd) return res.status(404).json({ message: "Ad not found" });
 
-    // 2️⃣ التحقق من صلاحيات المستخدم
     const isAdmin =
-      req.user?.permissions?.includes("edit-ads") || req.user?.is_super_admin;
+      req.user?.permissions?.includes("EDIT_AD") || req.user?.is_super_admin;
     const isOwner =
       existingAd.admin_id === req.user.id ||
       existingAd.subuser_id === req.user.id;
@@ -118,7 +121,6 @@ exports.updateAd = async (req, res) => {
     if (!isOwner && !isAdmin)
       return res.status(403).json({ message: "Access denied" });
 
-    // 3️⃣ فلترة البيانات القادمة
     const {
       title,
       description,
@@ -126,7 +128,7 @@ exports.updateAd = async (req, res) => {
       subCategoryId,
       display_phone,
       display_whatsapp,
-      display_dawaarly_contact,
+      display_dawaarly_contact, // ⬅️ هتتعدل بس لو هو أدمن
       rent_amount,
       rent_currency,
       rent_frequency,
@@ -164,9 +166,6 @@ exports.updateAd = async (req, res) => {
       ...(subCategoryId !== undefined && { subCategoryId }),
       ...(display_phone !== undefined && { display_phone }),
       ...(display_whatsapp !== undefined && { display_whatsapp }),
-      ...(display_dawaarly_contact !== undefined && {
-        display_dawaarly_contact,
-      }),
       ...(rent_amount !== undefined && { rent_amount }),
       ...(rent_currency !== undefined && { rent_currency }),
       ...(rent_frequency !== undefined && { rent_frequency }),
@@ -200,33 +199,42 @@ exports.updateAd = async (req, res) => {
       ...(am_gym !== undefined && { am_gym }),
       ...(tags !== undefined && { tags }),
     };
+
+    // ⚠️ لو اليوزر مش أدمن، منمنع تعديل حقل display_dawaarly_contact
+    if (!isAdmin && display_dawaarly_contact !== undefined) {
+      return res
+        .status(403)
+        .json({ message: "Only admins can modify dawaarly contact display" });
+    }
+
+    if (isAdmin && display_dawaarly_contact !== undefined) {
+      dataToUpdate.display_dawaarly_contact = display_dawaarly_contact;
+    }
+
+    // featured_priority للأدمن فقط
     if (!isAdmin && "featured_priority" in req.body) {
       delete req.body.featured_priority;
     }
 
     if (isAdmin && "featured_priority" in req.body) {
       let fp = Number(req.body.featured_priority);
-      if (isNaN(fp) || fp < 1 || fp > 10) {
-        fp = 0;
-      }
+      if (isNaN(fp) || fp < 1 || fp > 10) fp = 0;
       dataToUpdate.featured_priority = fp;
     }
+
+    // لو مش أدمن وعدل إعلان فعال، يرجع PENDING
     if (!isAdmin && existingAd.status === "ACTIVE") {
       dataToUpdate.status = "PENDING";
       dataToUpdate.was_previously_approved = true;
-      dataToUpdate.approved_at = null;
+      dataToUpdate.status_changed_at = null;
     }
 
-    // 5️⃣ تحديث الإعلان
     const updatedAd = await prisma.D_Vacation.update({
       where: { id: adId },
       data: dataToUpdate,
     });
 
-    res.json({
-      message: "Ad updated successfully",
-      ad: updatedAd,
-    });
+    res.json({ message: "Ad updated successfully", ad: updatedAd });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Server Error" });
@@ -247,13 +255,13 @@ exports.deleteAd = async (req, res) => {
       ad.admin_id === req.user.id || ad.subuser_id === req.user.id;
 
     const canDelete =
-      req.user.is_super_admin || req.user.permissions?.includes("delete-ads");
+      req.user.is_super_admin || req.user.permissions?.includes("DELETE_AD");
 
     if (!isOwner && !canDelete)
       return res.status(403).json({ message: "Access denied" });
 
     const images = await prisma.Images.findMany({
-      where: { ad_id: adId },
+      where: { id: adId },
     });
 
     for (const img of images) {
@@ -266,6 +274,8 @@ exports.deleteAd = async (req, res) => {
 
     res.json({ message: "Ad deleted successfully" });
   } catch (err) {
+    console.log(err);
+
     res.status(500).json({ message: "Server Error" });
   }
 };
@@ -283,7 +293,7 @@ exports.changeAdStatus = async (req, res) => {
 
     const isAdmin =
       req.user?.is_super_admin ||
-      req.user?.permissions?.includes("change-ads-status");
+      req.user?.permissions?.includes("CHANGE_ADS_STATUS");
 
     const isOwner =
       ad.admin_id === req.user.id || ad.subuser_id === req.user.id;
@@ -301,11 +311,7 @@ exports.changeAdStatus = async (req, res) => {
       return res.status(400).json({ message: "Invalid status" });
     }
 
-    /*
-      🧠 المنطق:
-      - Admin → يغير لأي حاجة
-      - Subscriber (Owner) → يقدر يعمل DISABLED بس
-    */
+    // التحقق من الصلاحيات
     if (!isAdmin) {
       if (!isOwner) return res.status(403).json({ message: "Access denied" });
 
@@ -329,17 +335,69 @@ exports.changeAdStatus = async (req, res) => {
           message: "Reason required for rejection",
         });
 
-      rejectReason = reason; // نخزن السبب في الحقل
+      rejectReason = reason;
     }
-
-    const updatedAd = await prisma.D_Vacation.update({
-      where: { id: Number(adId) },
-      data: { status, reject_reason: rejectReason },
-    });
 
     res.json({
       message: `Ad status updated to ${status}`,
-      ad: updatedAd,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server Error" });
+  }
+};
+// controllers/assignAdmin.js
+exports.assignAdmin = async (req, res) => {
+  try {
+    // 🔐 التحقق من الصلاحية أول حاجة
+    const user = req.user;
+
+    if (
+      !user?.is_super_admin &&
+      !user?.permissions?.includes("ASSIGN_RESPONSIBILITY")
+    ) {
+      return res.status(403).json({
+        message: "Access denied: You need ASSIGN_RESPONSIBILITY permission",
+      });
+    }
+
+    const adId = Number(req.params.adId);
+    const { admin_id } = req.body;
+
+    // ✅ 1. نسمح بـ null عادي
+    if (admin_id === undefined) {
+      return res.status(400).json({ message: "admin_id field is required" });
+    }
+
+    // ✅ 2. لو مش null، نتأكد إنه رقم صحيح والأدمن موجود
+    if (admin_id !== null) {
+      if (isNaN(admin_id)) {
+        return res
+          .status(400)
+          .json({ message: "admin_id must be a number or null" });
+      }
+
+      const adminUser = await prisma.users.findUnique({
+        where: { id: admin_id },
+      });
+
+      if (!adminUser || adminUser.user_type !== "ADMIN") {
+        return res.status(400).json({ message: "Invalid admin ID" });
+      }
+    }
+
+    // 3. التحقق من وجود الإعلان
+    const ad = await prisma.D_Vacation.findUnique({
+      where: { id: adId },
+    });
+
+    if (!ad) return res.status(404).json({ message: "Ad not found" });
+
+    res.json({
+      message:
+        admin_id === null
+          ? "Admin removed successfully"
+          : "Admin assigned successfully",
     });
   } catch (err) {
     console.error(err);
@@ -347,11 +405,6 @@ exports.changeAdStatus = async (req, res) => {
   }
 };
 const adIncludeRelations = {
-  images: {
-    where: { entity_type: "AD" },
-    take: 1,
-    orderBy: { is_cover: "desc" },
-  },
   admin: {
     select: {
       id: true,
@@ -361,7 +414,6 @@ const adIncludeRelations = {
       user_type: true,
     },
   },
-
   subuser: {
     select: {
       id: true,
@@ -371,7 +423,6 @@ const adIncludeRelations = {
       user_type: true,
       tiktok_link: true,
       facebook_link: true,
-      user_verified: true,
       active_ads_count: true,
       created_at: true,
     },
@@ -396,10 +447,6 @@ const adIncludeRelations = {
   },
 };
 const adIncludeListRelations = {
-  images: {
-    where: { entity_type: "AD" },
-    orderBy: { order: "asc" }, // لو عايز كل الصور مرتبة
-  },
   city: { select: { id: true, name_en: true, name_ar: true } },
   governorate: { select: { id: true, name_en: true, name_ar: true } },
   area: { select: { id: true, name_en: true, name_ar: true } },
@@ -425,7 +472,6 @@ const adIncludeListRelations = {
       user_type: true,
       tiktok_link: true,
       facebook_link: true,
-      user_verified: true,
       active_ads_count: true,
       created_at: true,
     },
@@ -458,23 +504,26 @@ async function attachIsFavorite(tx, ad, userId) {
   return !!fav;
 }
 function formatAdResponse(ad) {
+  // 🎯 1. ننظف الـ foreign keys أولاً
+  const adWithoutForeignKeys = removeForeignKeys(ad);
+  
   const amenities = {};
   const unitDetails = {};
 
-  Object.keys(ad).forEach((key) => {
+  Object.keys(adWithoutForeignKeys).forEach((key) => {
     // جمع am_
     if (key.startsWith("am_")) {
-      amenities[key.replace("am_", "")] = ad[key];
+      amenities[key.replace("am_", "")] = adWithoutForeignKeys[key];
     }
 
     // جمع unit details
     if (["bedrooms", "bathrooms", "level"].includes(key)) {
-      unitDetails[key] = ad[key];
+      unitDetails[key] = adWithoutForeignKeys[key];
     }
   });
 
   // نحذف القيم القديمة
-  const cleaned = { ...ad };
+  const cleaned = { ...adWithoutForeignKeys };
 
   Object.keys(cleaned).forEach((key) => {
     if (key.startsWith("am_")) delete cleaned[key];
@@ -499,8 +548,8 @@ function formatAdListResponse(ad) {
     }
   });
 
-const firstImage =
-  ad.images?.find((img) => img.is_cover) || ad.images?.[0] || null;
+  const firstImage =
+    ad.images?.find((img) => img.is_cover) || ad.images?.[0] || null;
 
   return {
     id: ad.id,
@@ -511,7 +560,6 @@ const firstImage =
     status: ad.status,
     featured_priority: ad.featured_priority,
     created_at: ad.created_at,
-
     city: ad.city,
     governorate: ad.governorate,
     area: ad.area,
@@ -521,6 +569,44 @@ const firstImage =
 
     image: firstImage,
     details,
+  };
+}
+async function enrichAd(ad, userId, imageLength = "cover") {
+  let fetchedImages = [];
+
+  if (imageLength === "all-image") {
+    // جميع الصور
+    fetchedImages = await prisma.Images.findMany({
+      where: { entity_type: "AD", entity_id: ad.id },
+      orderBy: { is_cover: "desc" },
+    });
+  } else {
+    // أول صورة (cover أو أول صورة موجودة)
+    const firstImage = await prisma.Images.findFirst({
+      where: { entity_type: "AD", entity_id: ad.id },
+      orderBy: { is_cover: "desc" },
+    });
+    if (firstImage) {
+      fetchedImages = [firstImage];
+    }
+  }
+
+  // عدد المفضلات
+  const favoritesCount = await prisma.adFavorite.count({
+    where: { ad_id: ad.id },
+  });
+
+  // هل هو في المفضلة للمستخدم الحالي
+  const isFavorite = await attachIsFavorite(prisma, ad, userId);
+
+  // تنسيق الإعلان (formatAdListResponse)
+  const formattedAd = imageLength == "cover" ? formatAdListResponse(ad) : formatAdResponse(ad)
+
+  return {
+    ...formattedAd,
+    image: fetchedImages,
+    favoritesCount,
+    isFavorite,
   };
 }
 exports.getAllAds = async (req, res) => {
@@ -707,23 +793,7 @@ exports.getAllAds = async (req, res) => {
       }),
     ]);
 
-    const cleanedAds = await Promise.all(
-      ads.map(async (ad) => {
-        const favoritesCount = await prisma.adFavorite.count({
-          where: { ad_id: ad.id },
-        });
-
-        const isFavorite = await attachIsFavorite(prisma, ad, userId);
-        const formattedAd = formatAdListResponse(ad); // مش بعد removeForeignKeys
-        return {
-          ...formattedAd,
-          isFavorite,
-          favoritesCount,
-          admin: ad.admin || null,
-          subuser: ad.subuser || null,
-        };
-      }),
-    );
+    const cleanedAds = await Promise.all(ads.map((ad) => enrichAd(ad, userId)));
     res.json({
       data: cleanedAds,
       pagination: {
@@ -745,6 +815,7 @@ exports.getAd = async (req, res) => {
   try {
     const adId = Number(req.params.adId);
 
+    // ✅ جلب الإعلان مع كل العلاقات
     const ad = await prisma.d_Vacation.findUnique({
       where: { id: adId },
       include: adIncludeRelations,
@@ -757,97 +828,69 @@ exports.getAd = async (req, res) => {
     const userId = req.user?.id || null;
     const ipAddress = req.ip;
 
-    // 🔥 نحسب active ads لو Subuser
-    let activeAdsCountPromise = null;
+    // 🔥 activeAdsCount لو فيه Subuser
+    const activeAdsCount = ad.subuser
+      ? await prisma.d_Vacation.count({
+          where: { subuser_id: ad.subuser.id, status: "ACTIVE" },
+        })
+      : 0;
 
-    if (ad.subuser) {
-      activeAdsCountPromise = prisma.d_Vacation.count({
-        where: {
-          subuser_id: ad.subuser.id,
-          status: "ACTIVE",
-        },
-      });
-    }
-
-    await prisma.$transaction(async (tx) => {
-      // 1️⃣ increment views
-      await tx.d_Vacation.update({
-        where: { id: adId },
-        data: { views_count: { increment: 1 } },
-      });
-
-      // 2️⃣ reach logic
-      let reachExists;
-
+    // 🔥 reach logic
+    async function handleReach(tx) {
       if (userId) {
-        reachExists = await tx.adReach.findUnique({
-          where: {
-            ad_id_user_id: {
-              ad_id: adId,
-              user_id: userId,
-            },
-          },
+        const reachExists = await tx.adReach.findUnique({
+          where: { ad_id_user_id: { ad_id: adId, user_id: userId } },
         });
-
         if (!reachExists) {
-          await tx.adReach.create({
-            data: { ad_id: adId, user_id: userId },
-          });
-
+          await tx.adReach.create({ data: { ad_id: adId, user_id: userId } });
           await tx.d_Vacation.update({
             where: { id: adId },
             data: { reach_count: { increment: 1 } },
           });
         }
       } else {
-        reachExists = await tx.adReach.findUnique({
-          where: {
-            ad_id_ip_address: {
-              ad_id: adId,
-              ip_address: ipAddress,
-            },
-          },
+        const reachExists = await tx.adReach.findUnique({
+          where: { ad_id_ip_address: { ad_id: adId, ip_address: ipAddress } },
         });
-
         if (!reachExists) {
           await tx.adReach.create({
             data: { ad_id: adId, ip_address: ipAddress },
           });
-
           await tx.d_Vacation.update({
             where: { id: adId },
             data: { reach_count: { increment: 1 } },
           });
         }
       }
+    }
+
+    // ✅ تحديث المشاهدات والـ reach
+    await prisma.$transaction(async (tx) => {
+      await tx.d_Vacation.update({
+        where: { id: adId },
+        data: { views_count: { increment: 1 } },
+      });
+
+      await handleReach(tx);
     });
 
-    // 🔥 نحسب activeAdsCount بعدين
-    const activeAdsCount = activeAdsCountPromise
-      ? await activeAdsCountPromise
-      : 0;
-
-    // 🔥 نجهز listed_by
-
-    // 🔥 تنظيف الإعلان
-    let cleanedAd = removeForeignKeys(ad);
-    cleanedAd = formatAdResponse(cleanedAd);
-    const favoritesCount = await prisma.adFavorite.count({
-      where: { ad_id: ad.id },
-    });
-    const isFavorite = await attachIsFavorite(prisma, ad, userId);
+    // ✅ استخدام enrichAd مع all-image عشان نجيب كل التفاصيل وكل الصور
+    const enrichedAd = await enrichAd(ad, userId, "all-image");
 
     return res.json({
-      ...cleanedAd,
+      ...enrichedAd,
       admin: ad.admin || null,
       subuser: ad.subuser
-        ? {
-            ...ad.subuser,
-            active_ads_count: activeAdsCount,
-          }
+        ? { ...ad.subuser, active_ads_count: activeAdsCount }
         : null,
-      isFavorite,
-      favoritesCount,
+      Categories: ad.Categories,
+      SubCategories: ad.SubCategories,
+      country: ad.country,
+      governorate: ad.governorate,
+      city: ad.city,
+      area: ad.area,
+      compound: ad.compound,
+      Booking: ad.Booking,
     });
   } catch (err) {
     console.error(err);
@@ -899,16 +942,14 @@ exports.getSectionsAds = async (req, res) => {
       include: adIncludeListRelations,
     });
 
-    const formatted = ads.map((ad) =>
-      formatAdListResponse(removeForeignKeys(ad)),
-    );
+    const cleanedAds = await Promise.all(ads.map((ad) => enrichAd(ad)));
 
     res.json({
-      data: formatted,
+      data: cleanedAds,
       pagination: {
         page: pageNumber,
         limit: limitNumber,
-        count: formatted.length,
+        count: cleanedAds.length,
       },
     });
   } catch (err) {
@@ -942,7 +983,7 @@ exports.getUserAds = async (req, res) => {
       prisma.D_Vacation.count({ where: whereCondition }),
     ]);
 
-    const cleanedAds = ads.map((ad) => formatAdListResponse(ad));
+    const cleanedAds = await Promise.all(ads.map((ad) => enrichAd(ad)));
 
     res.json({
       data: cleanedAds,
@@ -1008,7 +1049,7 @@ exports.getFavorites = async (req, res) => {
     const limitNumber = Number(limit);
     const skip = (pageNumber - 1) * limitNumber;
 
-    // نجيب المفضلات مع الإعلان بدون take/orderBy في images
+    // ✅ جلب المفضلات مع الإعلانات (من غير images)
     const [favorites, totalCount] = await Promise.all([
       prisma.adFavorite.findMany({
         where: { user_id: userId },
@@ -1018,10 +1059,7 @@ exports.getFavorites = async (req, res) => {
         include: {
           ad: {
             include: {
-              images: {
-                where: { entity_type: "AD" },
-                orderBy: { order: "asc" },
-              },
+              // ❌ مش هنحط images هنا
               city: { select: { id: true, name_en: true, name_ar: true } },
               governorate: {
                 select: { id: true, name_en: true, name_ar: true },
@@ -1052,7 +1090,6 @@ exports.getFavorites = async (req, res) => {
                   user_type: true,
                   tiktok_link: true,
                   facebook_link: true,
-                  user_verified: true,
                   active_ads_count: true,
                   created_at: true,
                 },
@@ -1064,25 +1101,11 @@ exports.getFavorites = async (req, res) => {
       prisma.adFavorite.count({ where: { user_id: userId } }),
     ]);
 
-    // تنسيق الإعلانات
-    const cleanedFavorites = favorites.map((fav) => {
-      const ad = fav.ad;
-      const isFavorite = true;
-
-      // نجيب أول صورة cover أو أول صورة متاحة
-      let firstImage = null;
-      if (ad.images && ad.images.length > 0) {
-        firstImage = ad.images.find((img) => img.is_cover) || ad.images[0];
-      }
-
-      return {
-        ...formatAdListResponse({
-          ...ad,
-          images: firstImage ? [firstImage] : [],
-        }),
-        isFavorite,
-      };
-    });
+    // ✅ تنسيق كل إعلان باستخدام enrichAd (نفس اللي في getSectionsAds)
+    // ✅ enrichAd هي المسؤولة عن جلب الصور
+    const cleanedFavorites = await Promise.all(
+      favorites.map((fav) => enrichAd(fav.ad, userId)),
+    );
 
     res.json({
       data: cleanedFavorites,

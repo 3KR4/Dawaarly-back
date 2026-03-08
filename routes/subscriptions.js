@@ -1,5 +1,6 @@
 const express = require("express");
 const router = express.Router();
+
 const {
   createSubscriptionRequest,
   getSubscriptionRequests,
@@ -8,22 +9,28 @@ const {
 } = require("../controllers/subscriptionController");
 
 const { authenticate } = require("../middlewares/authMiddleware");
-const { authorize } = require("../middlewares/authorize.JS");
+const { authorize } = require("../middlewares/authorize"); // كمان شيل .JS
 
+// Create request
 router.post("/", authenticate, createSubscriptionRequest);
 
-router.get("/", authenticate, authorize("admin"), getSubscriptionRequests);
+// Get all requests (Admin only)
+router.get("/", authenticate, authorize("ADMIN"), getSubscriptionRequests);
 
+// Approve request
 router.patch(
   "/:id/approve",
   authenticate,
-  authorize("admin"),
-  approveSubscriptionRequest,
+  authorize("ADMIN"),
+  approveSubscriptionRequest
 );
 
+// Reject request
 router.patch(
   "/:id/reject",
   authenticate,
-  authorize("admin"),
-  rejectSubscriptionRequest,
+  authorize("ADMIN"),
+  rejectSubscriptionRequest
 );
+
+module.exports = router;

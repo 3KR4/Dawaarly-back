@@ -1,14 +1,17 @@
 const express = require("express");
 const router = express.Router();
 const {
-  toggleFavorite,
-  getFavorites,
-} = require("../controllers/adController.js");
+  createSlider,
+  updateSlider,
+  deleteSlider,
+  getSliders,
+} = require("../controllers/slidersController");
+const { authenticate } = require("../middlewares/authMiddleware");
 const { authorize } = require("../middlewares/authorize.JS");
 
-router.post("/sliders", authorize("admin"), createSlider);
-router.get("/sliders", getSliders);
-router.patch("/sliders/:id", authorize("admin"), updateSlider);
-router.delete("/sliders/:id", authorize("admin"), deleteSlider);
+router.post("/", authenticate, authorize("ADMIN"), createSlider);
+router.patch("/:id", authenticate, authorize("ADMIN"), updateSlider);
+router.delete("/:id", authenticate, authorize("ADMIN"), deleteSlider);
+router.get("/", getSliders);
 
 module.exports = router;

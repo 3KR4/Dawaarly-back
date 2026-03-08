@@ -3,14 +3,29 @@ const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 
 cron.schedule("* * * * *", async () => {
-  const twentyMinutesAgo = new Date(Date.now() - 20 * 60 * 1000);
+  const isRunning = global.bookingCleanupRunning;
 
-  await prisma.booking.deleteMany({
-    where: {
-      status: "PENDING",
-      created_at: { lt: twentyMinutesAgo },
-    },
-  });
+  if (isRunning) {
+    console.log("⚠️ Previous cleanup still running, skipping...");
+    return;
+  }
 
-  console.log("Old pending bookings cleaned");
+  global.bookingCleanupRunning = true;
+
+  try {
+    const twentyMinutesAgo = new Date(Date.now() - 20 * 60 * 1000);
+
+    const result = await prisma.booking.deleteMany({
+      where: {
+        status: "PENDING",
+        created_at: { lt: twentyMinutesAgo },
+      },
+    });
+
+    console.log(`✅ Cleaned ${result.count} old pending bookings`);
+  } catch (error) {
+    console.error("❌ Error cleaning bookings:", error);
+  } finally {
+    global.bookingCleanupRunning = false;
+  }
 });

@@ -8,10 +8,9 @@ const {
   changeAdStatus,
   getAd,
   getAllAds,
-  addFavorite,
-  removeFavorite,
   getUserAds,
   getSectionsAds,
+  assignAdmin,
 } = require("../controllers/adController");
 const {
   authorizeOwnerOrSuperAdmin,
@@ -22,17 +21,17 @@ const { authorize } = require("../middlewares/authorize.JS");
 router.post(
   "/create",
   authenticate,
-  authorize("admin", "subscriber"),
+  authorize("ADMIN", "SUBUSER"),
   createAd,
 );
 router.put("/update/:adId", authenticate, authorizeOwnerOrSuperAdmin, updateAd);
 router.delete(
   "/delete/:adId",
   authenticate,
-  authorizeOwnerOrSuperAdmin,
   deleteAd,
 );
 router.patch("/update/:adId/status", authenticate, changeAdStatus);
+router.patch("/assign-admin/:adId", authenticate, assignAdmin);
 
 router.get("/all", getAllAds);
 router.get("/sections", getSectionsAds);

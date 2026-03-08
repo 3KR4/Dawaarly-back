@@ -1,8 +1,10 @@
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
-require("./jobs/bookingCleanup");
+// require("./jobs/bookingCleanup");
+const securityMiddleware = require("./middlewares/security");
 
+const selectedDataRoutes = require("./routes/selectedData");
 const authRoutes = require("./routes/auth");
 const adsRoutes = require("./routes/ads"); // اضفت هنا
 const imagesRoutes = require("./routes/allImages"); // اضفت هنا
@@ -10,13 +12,13 @@ const bookingRoutes = require("./routes/bookings"); // اضفت هنا
 const favoriteRoutes = require("./routes/favorites");
 const subscriptionRoutes = require("./routes/subscriptions");
 const slidersRoutes = require("./routes/sliders");
-
 const app = express();
 
 app.use(cors());
 app.use(express.json());
-
+securityMiddleware(app);
 // Routes
+app.use("/api/data", selectedDataRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/ads", adsRoutes);
 app.use("/api/images", imagesRoutes);

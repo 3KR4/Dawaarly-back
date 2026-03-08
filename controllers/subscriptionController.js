@@ -78,7 +78,7 @@ exports.approveSubscriptionRequest = async (req, res) => {
     await prisma.users.update({
       where: { id: request.user_id },
       data: {
-        user_type: "subscriber",
+        user_type: "SUBUSER",
       },
     });
 

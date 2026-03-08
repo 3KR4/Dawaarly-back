@@ -7,13 +7,16 @@ const {
   logout,
   verifyEmail,
   resendOTP,
-  updateUser,
   deleteUser,
   changePassword,
-  updatePreferences,
   getAllUsers,
+  updateProfile,
+  updatePermissions,
+  changeUserRole,
+  updateSubuserProfile,
 } = require("../controllers/authController");
 const { authenticate } = require("../middlewares/authMiddleware");
+const { authorize } = require("../middlewares/authorize.JS");
 
 // Auth
 router.post("/register", register);
@@ -24,10 +27,26 @@ router.post("/refresh-token", refreshToken);
 router.post("/logout", logout);
 
 // User management
-router.put("/user/:userId", authenticate, updateUser);
-router.patch("/preferences", authenticate, updatePreferences);
-router.put("/change-password", authenticate, changePassword);
-router.delete("/delete-user", authenticate, deleteUser);
+router.patch("/profile", authenticate, updateProfile);
+
+router.patch("/subuser-profile", authenticate, updateSubuserProfile);
+
+router.patch("/change-password", authenticate, changePassword);
+
+router.patch(
+  "/:id/role",
+  authenticate,
+  authorize("SUPER_ADMIN"),
+  changeUserRole,
+);
+
+router.patch(
+  "/:id/permissions",
+  authenticate,
+  authorize("SUPER_ADMIN"),
+  updatePermissions,
+);
+router.delete("/delete/:userId", authenticate, deleteUser);
 
 router.get("/all-users", authenticate, getAllUsers);
 

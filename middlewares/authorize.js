@@ -4,9 +4,15 @@ exports.authorize = (...allowedRoles) => {
       return res.status(401).json({ message: "Unauthorized" });
     }
 
-    const userRole = req.user.user_type;
+    const { user_type, is_super_admin } = req.user;
 
-    if (!allowedRoles.includes(userRole)) {
+    // لو مسموح SUPER_ADMIN
+    if (allowedRoles.includes("SUPER_ADMIN") && is_super_admin) {
+      return next();
+    }
+
+    // باقي الرولز
+    if (!allowedRoles.includes(user_type)) {
       return res.status(403).json({ message: "Forbidden" });
     }
 
