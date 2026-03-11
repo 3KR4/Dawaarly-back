@@ -28,7 +28,7 @@ function createAccessToken(user) {
       is_super_admin: user.is_super_admin || false,
     },
     process.env.JWT_SECRET,
-    { expiresIn: "7d" },
+    { expiresIn: "15m" },
   );
 }
 
@@ -214,38 +214,37 @@ exports.refreshToken = async (req, res) => {
     const token = req.cookies.refreshToken;
     if (!token) return res.status(401).json({ message: "No refresh token" });
 
-    const tokens = await prisma.RefreshToken.findMany({
-      where: { userId: decoded.id },
-    });
-
-    let validToken = null;
-
-    for (const t of tokens) {
-      const isMatch = await bcrypt.compare(token, t.token);
-      if (isMatch) {
-        validToken = t;
-        break;
-      }
-    }
-
-    if (!validToken)
-      return res.status(403).json({ message: "Invalid refresh token" });
-
-    if (!dbToken)
-      return res.status(403).json({ message: "Invalid refresh token" });
-
+    // أول خطوة: verify للـ token
     jwt.verify(token, process.env.JWT_REFRESH_SECRET, async (err, decoded) => {
       if (err)
         return res.status(403).json({ message: "Refresh token expired" });
+
+      // دلوقتي decoded موجود
+      const tokens = await prisma.RefreshToken.findMany({
+        where: { userId: decoded.id },
+      });
+
+      let validToken = null;
+      for (const t of tokens) {
+        const isMatch = await bcrypt.compare(token, t.token);
+        if (isMatch) {
+          validToken = t;
+          break;
+        }
+      }
+
+      if (!validToken)
+        return res.status(403).json({ message: "Invalid refresh token" });
 
       const user = await prisma.Users.findUnique({ where: { id: decoded.id } });
       if (!user) return res.status(404).json({ message: "User not found" });
 
       const newAccessToken = createAccessToken(user);
+
       res.json({ accessToken: newAccessToken });
     });
   } catch (error) {
-    console.log(error);
+    console.error(error);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -661,6 +660,52 @@ exports.getAllUsers = async (req, res) => {
       totalPages: Math.ceil(total / limit),
       users: serializedUsers,
     });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+exports.getUser = async (req, res) => {
+  try {
+    const requester = req.user;
+    const userId = parseInt(req.params.id);
+
+    const user = await prisma.Users.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // لو مش أدمن لازم يكون بيطلب نفسه فقط
+    if (
+      requester.user_type !== "ADMIN" &&
+      !requester.is_super_admin &&
+      requester.id !== userId
+    ) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+
+    const serialized = await serializeUser(user);
+
+    res.json(serialized);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+exports.getMe = async (req, res) => {
+  try {
+    const user = await prisma.Users.findUnique({
+      where: { id: req.user.id },
+    });
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    res.json(await serializeUser(user));
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Server error" });

@@ -14,6 +14,8 @@ const {
   updatePermissions,
   changeUserRole,
   updateSubuserProfile,
+  getUser,
+  getMe,
 } = require("../controllers/authController");
 const { authenticate } = require("../middlewares/authMiddleware");
 const { authorize } = require("../middlewares/authorize.JS");
@@ -48,6 +50,7 @@ router.patch(
 );
 router.delete("/delete/:userId", authenticate, deleteUser);
 
-router.get("/all-users", authenticate, getAllUsers);
-
+router.get("/users", authenticate, getAllUsers);
+router.get("/users/:id", authenticate, getUser);
+router.get("/me", authenticate, getMe);
 module.exports = router;
