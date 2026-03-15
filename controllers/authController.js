@@ -358,6 +358,66 @@ exports.resendOTP = [
     }
   },
 ];
+// POST /api/auth/forgot-password
+exports.forgotPassword = [
+  otpLimiter,
+  async (req, res) => {
+    const { email } = req.body;
+    const user = await prisma.Users.findUnique({ where: { email } });
+
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    // تحقق من الوقت لو عمل resend
+    const now = new Date();
+    if (user.reset_password_expiry && now - user.reset_password_expiry < 60*1000) {
+      return res.status(429).json({ message: "Wait before requesting again" });
+    }
+console.log(req.body);
+    const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiry = new Date(Date.now() + 10*60*1000); // 10 دقائق
+
+    await prisma.Users.update({
+      where: { email },
+      data: { reset_password_code: resetCode, reset_password_expiry: expiry },
+    });
+
+    await sendVerificationEmail(email, resetCode); // نفس الدالة عندك
+
+    res.json({ message: "OTP sent to your email" });
+  }
+];
+// POST /api/auth/reset-password
+exports.resetPassword = async (req, res) => {
+  try {
+    const { email, new_password, otp } = req.body;
+    const user = await prisma.Users.findUnique({ where: { email } });
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    if (
+      user.reset_password_code !== otp ||
+      !user.reset_password_expiry ||
+      new Date() > user.reset_password_expiry
+    ) {
+      return res.status(400).json({ message: "Invalid or expired OTP" });
+    }
+
+    const hashedNewPassword = await bcrypt.hash(new_password, 10);
+
+    await prisma.Users.update({
+      where: { email },
+      data: {
+        password: hashedNewPassword,
+        reset_password_code: null,
+        reset_password_expiry: null,
+      },
+    });
+
+    res.json({ message: "Password reset successfully" });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
 exports.updateProfile = async (req, res) => {
   try {
     const userId = req.user.id;

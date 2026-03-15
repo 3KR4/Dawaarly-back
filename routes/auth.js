@@ -7,6 +7,8 @@ const {
   logout,
   verifyEmail,
   resendOTP,
+  forgotPassword,
+  resetPassword,
   deleteUser,
   changePassword,
   getAllUsers,
@@ -25,6 +27,8 @@ router.post("/register", register);
 router.post("/login", login);
 router.post("/verify-email", verifyEmail);
 router.post("/resend-otp", resendOTP);
+router.post("/forgot-password", forgotPassword);
+router.post("/reset-password", resetPassword);
 router.post("/refresh-token", refreshToken);
 router.post("/logout", logout);
 

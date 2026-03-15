@@ -43,6 +43,8 @@ model Users {
   last_otp_sent_at    DateTime?
   verification_code   String?
   verification_expiry DateTime?
+  reset_password_code    String?  
+  reset_password_expiry  DateTime?
 
   interests Int[]
 
