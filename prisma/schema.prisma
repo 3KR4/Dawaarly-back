@@ -380,6 +380,7 @@ model Cities {
   governorate    Governorates @relation(fields: [governorate_id], references: [id])
   users          Users[]
   areas          Areas[]
+  compounds      Compounds[]  
   ads            D_Vacation[] @relation("CityAds")
 
   @@index([governorate_id])
@@ -392,20 +393,23 @@ model Areas {
   city_id Int
   city    Cities @relation(fields: [city_id], references: [id])
 
-  compounds Compounds[]
+  compounds Compounds[] 
   ads       D_Vacation[] @relation("AreaAds")
 
   @@index([city_id])
 }
 
 model Compounds {
-  id      Int    @id @default(autoincrement())
+  id      Int     @id @default(autoincrement())
   name_en String
   name_ar String
-  area_id Int
-  area    Areas  @relation(fields: [area_id], references: [id])
-
+  
+  city_id Int
+  city    Cities  @relation(fields: [city_id], references: [id])
+  area_id Int?
+  area    Areas?  @relation(fields: [area_id], references: [id])
   ads D_Vacation[] @relation("CompoundAds")
 
+  @@index([city_id])
   @@index([area_id])
 }

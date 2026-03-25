@@ -372,7 +372,6 @@ exports.forgotPassword = [
     if (user.reset_password_expiry && now - user.reset_password_expiry < 60*1000) {
       return res.status(429).json({ message: "Wait before requesting again" });
     }
-console.log(req.body);
     const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
     const expiry = new Date(Date.now() + 10*60*1000); // 10 دقائق
 

@@ -18,13 +18,42 @@ exports.createAd = async (req, res) => {
     const data = req.body;
 
     // ---------------- Required Fields ----------------
-    const requiredFields = ["title", "categoryId", "governorate_id", "city_id"];
+    const requiredFields = [
+      "title",
+      "categoryId",
+      "subCategoryId",
+      "country_id",
+      "governorate_id",
+      "city_id",
+      "rent_frequency",
+      "rent_currency",
+      "deposit_amount",
+      "rent_amount",
+      "bedrooms",
+      "bathrooms",
+      "level",
+    ];
+
+    const errors = [];
+
     for (const field of requiredFields) {
-      if (!data[field]) {
-        return res
-          .status(400)
-          .json({ message: `Field "${field}" is required.` });
+      if (
+        data[field] === undefined ||
+        data[field] === null ||
+        data[field] === ""
+      ) {
+        errors.push({
+          field,
+          message: `${field} is required`,
+        });
       }
+    }
+
+    if (errors.length > 0) {
+      return res.status(400).json({
+        message: "Validation Error",
+        errors, // 🔥 array
+      });
     }
 
     // ---------------- Validate Dates ----------------
@@ -32,7 +61,7 @@ exports.createAd = async (req, res) => {
       if (!validateAdDates(data.available_from, data.available_to)) {
         return res
           .status(400)
-          .json({ message: "Invalid available_from or available_to dates." });
+          .json({ message: "Invalid available from or available to dates." });
       }
     }
 
@@ -506,7 +535,7 @@ async function attachIsFavorite(tx, ad, userId) {
 function formatAdResponse(ad) {
   // 🎯 1. ننظف الـ foreign keys أولاً
   const adWithoutForeignKeys = removeForeignKeys(ad);
-  
+
   const amenities = {};
   const unitDetails = {};
 
@@ -600,7 +629,8 @@ async function enrichAd(ad, userId, imageLength = "cover") {
   const isFavorite = await attachIsFavorite(prisma, ad, userId);
 
   // تنسيق الإعلان (formatAdListResponse)
-  const formattedAd = imageLength == "cover" ? formatAdListResponse(ad) : formatAdResponse(ad)
+  const formattedAd =
+    imageLength == "cover" ? formatAdListResponse(ad) : formatAdResponse(ad);
 
   return {
     ...formattedAd,
