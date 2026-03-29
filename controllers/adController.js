@@ -314,12 +314,14 @@ exports.changeAdStatus = async (req, res) => {
     const { adId } = req.params;
     const { status, reason } = req.body;
 
+    // 🔹 نجيب الإعلان من قاعدة البيانات
     const ad = await prisma.D_Vacation.findUnique({
       where: { id: Number(adId) },
     });
 
     if (!ad) return res.status(404).json({ message: "Ad not found" });
 
+    // 🔹 صلاحيات المستخدم
     const isAdmin =
       req.user?.is_super_admin ||
       req.user?.permissions?.includes("CHANGE_ADS_STATUS");
@@ -327,7 +329,7 @@ exports.changeAdStatus = async (req, res) => {
     const isOwner =
       ad.admin_id === req.user.id || ad.subuser_id === req.user.id;
 
-    // الحالات المسموحة
+    // 🔹 الحالات المسموحة
     const allowedStatuses = [
       "ACTIVE",
       "REJECTED",
@@ -340,9 +342,10 @@ exports.changeAdStatus = async (req, res) => {
       return res.status(400).json({ message: "Invalid status" });
     }
 
-    // التحقق من الصلاحيات
+    // 🔹 التحقق من الصلاحيات
     if (!isAdmin) {
-      if (!isOwner) return res.status(403).json({ message: "Access denied" });
+      if (!isOwner)
+        return res.status(403).json({ message: "Access denied" });
 
       if (status !== "DISABLED") {
         return res.status(403).json({
@@ -351,8 +354,8 @@ exports.changeAdStatus = async (req, res) => {
       }
     }
 
-    // لو Reject لازم سبب (Admin فقط)
-    let rejectReason = null;
+    // 🔹 إذا الحالة REJECTED نحتاج السبب
+    let rejectReason;
     if (status === "REJECTED") {
       if (!isAdmin)
         return res.status(403).json({
@@ -367,8 +370,18 @@ exports.changeAdStatus = async (req, res) => {
       rejectReason = reason;
     }
 
+    // 🔹 تحديث الإعلان
+    const updatedAd = await prisma.D_Vacation.update({
+      where: { id: Number(adId) },
+      data: {
+        status,
+        ...(rejectReason && { rejectReason }), // فقط لو REJECTED
+      },
+    });
+
     res.json({
       message: `Ad status updated to ${status}`,
+      ad: updatedAd,
     });
   } catch (err) {
     console.error(err);
@@ -421,6 +434,13 @@ exports.assignAdmin = async (req, res) => {
     });
 
     if (!ad) return res.status(404).json({ message: "Ad not found" });
+
+    await prisma.D_Vacation.update({
+      where: { id: adId },
+      data: {
+        admin_id,
+      },
+    });
 
     res.json({
       message:
@@ -584,6 +604,7 @@ function formatAdListResponse(ad) {
     id: ad.id,
     title: ad.title,
     rent_amount: ad.rent_amount,
+    deposit_amount: ad.deposit_amount,
     rent_currency: ad.rent_currency,
     rent_frequency: ad.rent_frequency,
     status: ad.status,
@@ -687,13 +708,6 @@ exports.getAllAds = async (req, res) => {
     const limitNumber = Number(limit);
     const skip = (pageNumber - 1) * limitNumber;
 
-    /*
-      🧠 تحديد الصلاحيات:
-      - لو Admin يقدر يحدد status
-      - لو User عادي يشوف ACTIVE بس
-      - لو مش مسجل دخول يشوف ACTIVE بس
-    */
-
     let userId = null;
     let isAdmin = false;
 
@@ -707,7 +721,7 @@ exports.getAllAds = async (req, res) => {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         userId = decoded.id;
 
-        isAdmin = decoded.is_super_admin;
+        isAdmin = decoded.is_super_admin || decoded.user_type === "ADMIN";
       } catch (err) {
         console.log("Invalid token", err);
       }
@@ -715,8 +729,14 @@ exports.getAllAds = async (req, res) => {
     }
     let statusFilter = { status: "ACTIVE" }; // default
 
-    if (isAdmin && status) {
-      statusFilter = { status: status.trim() }; // trim لأي مسافات
+    if (isAdmin) {
+      if (status && status.trim() !== "") {
+        statusFilter = { status: status.trim() };
+      } else {
+        statusFilter = {
+          NOT: { status: "PENDING" },
+        };
+      }
     }
 
     const filters = [

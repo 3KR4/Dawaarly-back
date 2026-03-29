@@ -2,6 +2,16 @@ const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 
 // =========================
+// Helpers
+// =========================
+const parseId = (value) => {
+  if (value === undefined || value === null || value === "") return undefined;
+
+  const parsed = Number(value);
+  return isNaN(parsed) ? undefined : parsed;
+};
+
+// =========================
 // Categories
 // =========================
 exports.getCategories = async (req, res) => {
@@ -17,7 +27,7 @@ exports.getCategories = async (req, res) => {
 
     const result = categories.map((cat) => ({
       ...cat,
-      subCategories_count: cat._count.subCategories, // ✅ fix هنا
+      subCategories_count: cat._count.subCategories,
       _count: undefined,
     }));
 
@@ -29,10 +39,10 @@ exports.getCategories = async (req, res) => {
 
 exports.getSubCategories = async (req, res) => {
   try {
-    const { category_id } = req.query;
+    const categoryId = parseId(req.query.category_id);
 
     const subCategories = await prisma.SubCategories.findMany({
-      where: category_id ? { category_id: Number(category_id) } : {},
+      where: categoryId !== undefined ? { category_id: categoryId } : {},
       orderBy: { id: "asc" },
     });
 
@@ -42,13 +52,16 @@ exports.getSubCategories = async (req, res) => {
   }
 };
 
+// =========================
+// Countries
+// =========================
 exports.getCountries = async (req, res) => {
   try {
     const countries = await prisma.Countries.findMany({
       orderBy: { id: "asc" },
       include: {
         _count: {
-          select: { governorates: true }, // ✅ نفس الاسم في schema
+          select: { governorates: true },
         },
       },
     });
@@ -65,23 +78,26 @@ exports.getCountries = async (req, res) => {
   }
 };
 
+// =========================
+// Governorates
+// =========================
 exports.getGovernorates = async (req, res) => {
   try {
-    const { country_id } = req.query;
+    const countryId = parseId(req.query.country_id);
 
     const governorates = await prisma.Governorates.findMany({
-      where: country_id ? { country_id: Number(country_id) } : {},
+      where: countryId !== undefined ? { country_id: countryId } : {},
       orderBy: { id: "asc" },
       include: {
         _count: {
-          select: { cities: true }, // ✅ صح
+          select: { cities: true },
         },
       },
     });
 
     const result = governorates.map((gov) => ({
       ...gov,
-      cities_count: gov._count.cities, // ✅ fix هنا
+      cities_count: gov._count.cities,
       _count: undefined,
     }));
 
@@ -91,18 +107,24 @@ exports.getGovernorates = async (req, res) => {
   }
 };
 
+// =========================
+// Cities
+// =========================
 exports.getCities = async (req, res) => {
   try {
-    const { governorate_id } = req.query;
+    const governorateId = parseId(req.query.governorate_id);
 
     const cities = await prisma.Cities.findMany({
-      where: governorate_id ? { governorate_id: Number(governorate_id) } : {},
+      where:
+        governorateId !== undefined
+          ? { governorate_id: governorateId }
+          : {},
       orderBy: { id: "asc" },
       include: {
         _count: {
           select: {
             areas: true,
-            compounds: true, // ✅ إضافة عدد الكمبوندات المباشرة للمدينة
+            compounds: true,
           },
         },
       },
@@ -111,7 +133,7 @@ exports.getCities = async (req, res) => {
     const result = cities.map((city) => ({
       ...city,
       areas_count: city._count.areas,
-      compounds_count: city._count.compounds, // ✅ عدد الكمبوندات المباشرة
+      compounds_count: city._count.compounds,
       _count: undefined,
     }));
 
@@ -121,19 +143,21 @@ exports.getCities = async (req, res) => {
   }
 };
 
+// =========================
+// Areas
+// =========================
 exports.getAreas = async (req, res) => {
   try {
-    const { city_id } = req.query;
+    const cityId = parseId(req.query.city_id);
 
     const areas = await prisma.Areas.findMany({
-      where: city_id ? { city_id: Number(city_id) } : {},
+      where: cityId !== undefined ? { city_id: cityId } : {},
       orderBy: { id: "asc" },
       include: {
         _count: {
           select: { compounds: true },
         },
         city: {
-          // ✅ إضافة معلومات المدينة
           select: {
             id: true,
             name_ar: true,
@@ -155,17 +179,20 @@ exports.getAreas = async (req, res) => {
   }
 };
 
+// =========================
+// Compounds
+// =========================
 exports.getCompounds = async (req, res) => {
   try {
-    const { area_id, city_id } = req.query;
+    const areaId = parseId(req.query.area_id);
+    const cityId = parseId(req.query.city_id);
 
-    // بناء شرط where ديناميكي
     let whereCondition = {};
 
-    if (area_id) {
-      whereCondition.area_id = Number(area_id);
-    } else if (city_id) {
-      whereCondition.city_id = Number(city_id);
+    if (areaId !== undefined) {
+      whereCondition.area_id = areaId;
+    } else if (cityId !== undefined) {
+      whereCondition.city_id = cityId;
     }
 
     const compounds = await prisma.Compounds.findMany({
@@ -189,7 +216,6 @@ exports.getCompounds = async (req, res) => {
       },
     });
 
-    // تنسيق النتيجة لجعلها أكثر وضوحاً
     const result = compounds.map((compound) => ({
       id: compound.id,
       name_ar: compound.name_ar,
