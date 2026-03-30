@@ -21,6 +21,7 @@ const {
 } = require("../controllers/authController");
 const { authenticate } = require("../middlewares/authMiddleware");
 const { authorize } = require("../middlewares/authorize.JS");
+const { optionalAuth } = require("../middlewares/optionalAuthMiddleware");
 
 // Auth
 router.post("/register", register);
@@ -55,6 +56,6 @@ router.patch(
 router.delete("/delete/:userId", authenticate, deleteUser);
 
 router.get("/users", authenticate, getAllUsers);
-router.get("/users/:id", authenticate, getUser);
+router.get("/users/:id", optionalAuth, getUser);
 router.get("/me", authenticate, getMe);
 module.exports = router;

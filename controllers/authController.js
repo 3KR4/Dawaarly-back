@@ -39,14 +39,17 @@ function createRefreshToken(user) {
 }
 
 // ----------------------- Serialize -----------------------
-async function serializeUser(user) {
-  // جلب الـ objects من قاعدة البيانات
+async function serializeUser(user, options = {}) {
+  const { includeSensitive = false } = options;
+
   const [country, governorate, city] = await Promise.all([
     user.country_id
       ? prisma.Countries.findUnique({ where: { id: user.country_id } })
       : null,
     user.governorate_id
-      ? prisma.Governorates.findUnique({ where: { id: user.governorate_id } })
+      ? prisma.Governorates.findUnique({
+          where: { id: user.governorate_id },
+        })
       : null,
     user.city_id
       ? prisma.Cities.findUnique({ where: { id: user.city_id } })
@@ -61,7 +64,6 @@ async function serializeUser(user) {
     gender: user.gender,
     birth_date: user.birth_date,
     created_at: user.created_at,
-    user_type: user.user_type,
     email_verified: user.email_verified,
     phone_verified: user.phone_verified,
     country: country || null,
@@ -71,15 +73,16 @@ async function serializeUser(user) {
     theme: user.theme,
     interests: user.interests || [],
 
-    // لو مستخدم SUBUSER
+    // SUBUSER fields
     ...(user.user_type === "SUBUSER" && {
       tiktok_link: user.tiktok_link,
       facebook_link: user.facebook_link,
       subscription_ads_limit: user.subscription_ads_limit || 0,
     }),
 
-    // لو مستخدم ADMIN
-    ...(user.user_type === "ADMIN" && {
+    // 👇 sensitive fields (ONLY لو مسموح)
+    ...(includeSensitive && {
+      user_type: user.user_type,
       permissions: user.permissions || [],
       is_super_admin: user.is_super_admin || false,
     }),
@@ -369,11 +372,14 @@ exports.forgotPassword = [
 
     // تحقق من الوقت لو عمل resend
     const now = new Date();
-    if (user.reset_password_expiry && now - user.reset_password_expiry < 60*1000) {
+    if (
+      user.reset_password_expiry &&
+      now - user.reset_password_expiry < 60 * 1000
+    ) {
       return res.status(429).json({ message: "Wait before requesting again" });
     }
     const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
-    const expiry = new Date(Date.now() + 10*60*1000); // 10 دقائق
+    const expiry = new Date(Date.now() + 10 * 60 * 1000); // 10 دقائق
 
     await prisma.Users.update({
       where: { email },
@@ -383,7 +389,7 @@ exports.forgotPassword = [
     await sendVerificationEmail(email, resetCode); // نفس الدالة عندك
 
     res.json({ message: "OTP sent to your email" });
-  }
+  },
 ];
 // POST /api/auth/reset-password
 exports.resetPassword = async (req, res) => {
@@ -713,10 +719,8 @@ exports.getAllUsers = async (req, res) => {
     );
 
     res.json({
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+
       users: serializedUsers,
     });
   } catch (error) {
@@ -726,8 +730,12 @@ exports.getAllUsers = async (req, res) => {
 };
 exports.getUser = async (req, res) => {
   try {
-    const requester = req.user;
+    const requester = req.user; // ممكن يكون null
     const userId = parseInt(req.params.id);
+
+    if (isNaN(userId)) {
+      return res.status(400).json({ message: "Invalid user id" });
+    }
 
     const user = await prisma.Users.findUnique({
       where: { id: userId },
@@ -737,16 +745,17 @@ exports.getUser = async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    // لو مش أدمن لازم يكون بيطلب نفسه فقط
-    if (
-      requester.user_type !== "ADMIN" &&
-      !requester.is_super_admin &&
-      requester.id !== userId
-    ) {
-      return res.status(403).json({ message: "Forbidden" });
-    }
+    const isAdmin =
+      requester?.user_type === "ADMIN" || requester?.is_super_admin;
 
-    const serialized = await serializeUser(user);
+    const isOwner = requester?.id === userId;
+
+    // ❌ لو مش Admin ولا Owner → رجع public data بس
+    const includeSensitive = isAdmin || isOwner;
+
+    const serialized = await serializeUser(user, {
+      includeSensitive,
+    });
 
     res.json(serialized);
   } catch (error) {
