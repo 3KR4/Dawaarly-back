@@ -1,9 +1,9 @@
+const jwt = require("jsonwebtoken");
 exports.optionalAuth = (req, res, next) => {
-  const authHeader =
-    req.headers["authorization"] || req.headers["x-api-key"];
-
+  const authHeader = req.headers["authorization"] || req.headers["x-api-key"];
   if (!authHeader) {
-    req.user = null; // 👈 مهم
+    req.user = null;
+    console.log("No auth header found");
     return next();
   }
 
@@ -13,6 +13,7 @@ exports.optionalAuth = (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    console.log("Decoded JWT:", decoded);
 
     req.user = {
       id: decoded.id,
@@ -21,7 +22,8 @@ exports.optionalAuth = (req, res, next) => {
       permissions: decoded.permissions || [],
     };
   } catch (err) {
-    req.user = null; // 👈 حتى لو التوكن غلط
+    console.log("JWT verify failed:", err.message);
+    req.user = null;
   }
 
   next();

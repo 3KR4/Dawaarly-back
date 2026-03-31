@@ -1,11 +1,14 @@
 const { PrismaClient } = require("@prisma/client");
+const prisma = new PrismaClient();
+
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const { sendVerificationEmail } = require("../utils/sendEmail");
 const rateLimit = require("express-rate-limit");
 const helmet = require("helmet");
-
-const prisma = new PrismaClient();
+const {
+  checkSuperAdminPriority,
+} = require("../middlewares/checkSuperAdminPriority");
 
 // Rate limiter للـ auth endpoints
 const authLimiter = rateLimit({
@@ -31,17 +34,13 @@ function createAccessToken(user) {
     { expiresIn: "15m" },
   );
 }
-
 function createRefreshToken(user) {
   return jwt.sign({ id: user.id }, process.env.JWT_REFRESH_SECRET, {
     expiresIn: "7d",
   });
 }
-
 // ----------------------- Serialize -----------------------
-async function serializeUser(user, options = {}) {
-  const { includeSensitive = false } = options;
-
+async function serializeUser(user, requester = null) {
   const [country, governorate, city] = await Promise.all([
     user.country_id
       ? prisma.Countries.findUnique({ where: { id: user.country_id } })
@@ -56,6 +55,12 @@ async function serializeUser(user, options = {}) {
       : null,
   ]);
 
+  const isAdmin = requester?.user_type === "ADMIN" || requester?.is_super_admin;
+
+  const isOwner = requester?.id === user.id;
+
+  const canSeeSensitive = isAdmin || isOwner;
+
   return {
     id: user.id,
     full_name: user.full_name,
@@ -66,22 +71,22 @@ async function serializeUser(user, options = {}) {
     created_at: user.created_at,
     email_verified: user.email_verified,
     phone_verified: user.phone_verified,
+
     country: country || null,
     governorate: governorate || null,
     city: city || null,
+
     language: user.language,
     theme: user.theme,
     interests: user.interests || [],
 
-    // SUBUSER fields
-    ...(user.user_type === "SUBUSER" && {
-      tiktok_link: user.tiktok_link,
-      facebook_link: user.facebook_link,
-      subscription_ads_limit: user.subscription_ads_limit || 0,
-    }),
+    // 👇 public
+    tiktok_link: user.tiktok_link,
+    facebook_link: user.facebook_link,
 
-    // 👇 sensitive fields (ONLY لو مسموح)
-    ...(includeSensitive && {
+    // 👇 sensitive
+    ...(canSeeSensitive && {
+      subscription_ads_limit: user.subscription_ads_limit || 0,
       user_type: user.user_type,
       permissions: user.permissions || [],
       is_super_admin: user.is_super_admin || false,
@@ -150,7 +155,6 @@ exports.register = [
     });
   },
 ];
-
 // ----------------------- LOGIN -----------------------
 exports.login = [
   authLimiter,
@@ -206,7 +210,7 @@ exports.login = [
 
     res.json({
       accessToken,
-      user: await serializeUser(user),
+      user: await serializeUser(user, user),
     });
   },
 ];
@@ -314,7 +318,7 @@ exports.verifyEmail = [
     res.json({
       message: "Email verified successfully",
       accessToken,
-      user: await serializeUser(updatedUser),
+      user: await serializeUser(updatedUser, updatedUser),
     });
   },
 ];
@@ -458,7 +462,7 @@ exports.updateProfile = async (req, res) => {
 
     res.json({
       message: "Profile updated",
-      user: await serializeUser(user),
+      user: await serializeUser(user, req.user),
     });
   } catch (error) {
     res.status(500).json({ message: "Server error" });
@@ -487,42 +491,183 @@ exports.updateSubuserProfile = async (req, res) => {
 
     res.json({
       message: "Updated",
-      user: await serializeUser(updated),
+      user: await serializeUser(updated, req.user),
     });
   } catch (e) {
+    res.status(500).json({ message: "Server error" });
+  }
+};
+exports.setSuperAdmin = async (req, res) => {
+  try {
+    const requester = req.user;
+    const targetId = Number(req.params.id);
+    const { makeSuper } = req.body; // true => promote, false => demote
+
+    if (!requester.is_super_admin) {
+      return res
+        .status(403)
+        .json({ message: "Only super admins can assign super admins" });
+    }
+
+    // ممكن تضيف check الأولوية لو عايز
+    await checkSuperAdminPriority(requester.id, targetId);
+
+    await prisma.Users.update({
+      where: { id: targetId },
+      data: {
+        is_super_admin: !!makeSuper, // true/false حسب الطلب
+        user_type: makeSuper ? "ADMIN" : "ADMIN", // ممكن تخليها مش متغيرة عند demote
+      },
+    });
+
+    res.json({
+      message: makeSuper
+        ? "User promoted to super admin"
+        : "User demoted from super admin",
+    });
+  } catch (e) {
+    res
+      .status(403)
+      .json({ message: e.message || "Cannot change super admin status" });
+  }
+};
+exports.updateSubscriptionLimit = async (req, res) => {
+  try {
+    const requester = req.user;
+    if (
+      !requester.is_super_admin &&
+      !requester.permissions?.includes("CHANGE_SUBUSER_LIMIT")
+    ) {
+      return res.status(403).json({
+        message: "Forbidden: Not allowed to change subscription limit",
+      });
+    }
+
+    const userId = Number(req.params.id);
+    const { subscription_ads_limit } = req.body;
+
+    const user = await prisma.Users.findUnique({ where: { id: userId } });
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    if (user.user_type !== "SUBUSER") {
+      return res
+        .status(400)
+        .json({ message: "Only subusers can have subscription limit" });
+    }
+
+    await prisma.Users.update({
+      where: { id: userId },
+      data: { subscription_ads_limit: subscription_ads_limit || 0 },
+    });
+
+    res.json({
+      message: "Subscription ads limit updated successfully",
+    });
+  } catch (e) {
+    console.error(e);
     res.status(500).json({ message: "Server error" });
   }
 };
 exports.changeUserRole = async (req, res) => {
   try {
     const requester = req.user;
-
-    if (!requester.is_super_admin)
-      return res.status(403).json({ message: "Super admin only" });
-
     const userId = Number(req.params.id);
     const { user_type } = req.body;
 
+    // جلب المستخدم الهدف
     const user = await prisma.Users.findUnique({
       where: { id: userId },
     });
-
     if (!user) return res.status(404).json({ message: "User not found" });
 
-    if (user.user_type === "SUBUSER")
+    // منع تغيير رول سوبر ادمن
+    if (user.is_super_admin) {
       return res.status(400).json({
-        message: "Subuser role cannot be changed",
+        message: "Cannot change role of a super admin",
+      });
+    }
+    console.log("user_type:", user_type);
+
+    // ---------------- قواعد التغيير ----------------
+    if (user_type === "ADMIN") {
+      // لو حد عايز يحول لادمن → لازم يكون سوبر ادمن
+      if (!requester.is_super_admin) {
+        return res.status(403).json({
+          message: "Only super admin can promote someone to admin",
+        });
+      }
+
+      // تحديث رول و permissions افتراضية
+      const updateData = {
+        user_type: "ADMIN",
+        permissions: ["CHANGE_ADS_STATUS"],
+      };
+
+      await prisma.Users.update({
+        where: { id: userId },
+        data: updateData,
       });
 
-    const updated = await prisma.Users.update({
-      where: { id: userId },
-      data: { user_type },
-    });
+      return res.json({
+        message: "User promoted to ADMIN",
+      });
+    }
 
-    res.json({
-      message: `Role updated to: ${user_type}`,
+    if (user_type === "SUBUSER") {
+      // لازم يكون عنده صلاحية MAKE_SUBSCRIBER
+      if (
+        !requester.is_super_admin &&
+        !requester.permissions?.includes("MAKE_SUBSCRIBER")
+      ) {
+        return res.status(403).json({
+          message: "You don't have permission to make someone a subscriber",
+        });
+      }
+
+      const updateData = {
+        user_type: "SUBUSER",
+      };
+
+      await prisma.Users.update({
+        where: { id: userId },
+        data: updateData,
+      });
+
+      return res.json({
+        message: "User converted to SUBUSER",
+      });
+    }
+
+    if (user_type === "USER") {
+      // لازم يكون عنده صلاحية لتغيير الرول
+      if (!requester.is_super_admin) {
+        return res.status(403).json({
+          message: "You don't have permission to demote someone to USER",
+        });
+      }
+
+      const updateData = {
+        user_type: "USER",
+        permissions: [], // أو صلاحيات افتراضية للـ USER العادي
+        subscription_ads_limit: 0,
+      };
+
+      await prisma.Users.update({
+        where: { id: userId },
+        data: updateData,
+      });
+
+      return res.json({
+        message: "User demoted to USER",
+      });
+    }
+
+    // منع تغيير SUBUSER أو أي رول آخر
+    return res.status(400).json({
+      message: "Role change not allowed",
     });
   } catch (e) {
+    console.log(e);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -541,6 +686,12 @@ exports.updatePermissions = async (req, res) => {
     });
 
     if (!user) return res.status(404).json({ message: "User not found" });
+    // ✅ هنا نضيف check للسوبر ادمن
+    if (user.is_super_admin) {
+      return res.status(403).json({
+        message: "Cannot change permissions of a super admin",
+      });
+    }
 
     if (user.user_type !== "ADMIN")
       return res.status(400).json({
@@ -554,7 +705,7 @@ exports.updatePermissions = async (req, res) => {
 
     res.json({
       message: "Permissions updated",
-      user: await serializeUser(updated),
+      user: await serializeUser(updated, req.user),
     });
   } catch (e) {
     res.status(500).json({ message: "Server error" });
@@ -669,10 +820,26 @@ exports.getAllUsers = async (req, res) => {
 
     // فلتر الاسم
     if (search) {
-      where.full_name = {
-        contains: search,
-        mode: "insensitive",
-      };
+      where.OR = [
+        {
+          full_name: {
+            contains: search,
+            mode: "insensitive",
+          },
+        },
+        {
+          email: {
+            contains: search,
+            mode: "insensitive",
+          },
+        },
+        {
+          phone: {
+            contains: search,
+            mode: "insensitive",
+          },
+        },
+      ];
     }
 
     // فلتر الصلاحيات (أكثر من قيمة)
@@ -712,7 +879,7 @@ exports.getAllUsers = async (req, res) => {
 
     const serializedUsers = await Promise.all(
       users.map(async (u) => {
-        const base = await serializeUser(u);
+        const base = await serializeUser(u, requester);
         base.active_ads_count = countsMap[u.id] || 0;
         return base;
       }),
@@ -745,17 +912,7 @@ exports.getUser = async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    const isAdmin =
-      requester?.user_type === "ADMIN" || requester?.is_super_admin;
-
-    const isOwner = requester?.id === userId;
-
-    // ❌ لو مش Admin ولا Owner → رجع public data بس
-    const includeSensitive = isAdmin || isOwner;
-
-    const serialized = await serializeUser(user, {
-      includeSensitive,
-    });
+    const serialized = await serializeUser(user, requester);
 
     res.json(serialized);
   } catch (error) {
@@ -773,7 +930,7 @@ exports.getMe = async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    res.json(await serializeUser(user));
+    res.json(await serializeUser(user, user));
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Server error" });

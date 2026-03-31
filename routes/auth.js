@@ -18,6 +18,8 @@ const {
   updateSubuserProfile,
   getUser,
   getMe,
+  updateSubscriptionLimit,
+  setSuperAdmin,
 } = require("../controllers/authController");
 const { authenticate } = require("../middlewares/authMiddleware");
 const { authorize } = require("../middlewares/authorize.JS");
@@ -53,6 +55,20 @@ router.patch(
   authorize("SUPER_ADMIN"),
   updatePermissions,
 );
+
+router.patch(
+  "/:id/super-admin",
+  authenticate, // لازم المستخدم يكون مسجل دخول
+  authorize("SUPER_ADMIN"), // بس الـ SUPER_ADMIN يقدر يعمل ده
+  setSuperAdmin,
+);
+
+router.patch(
+  "/:id/subscription-limit",
+  authenticate, // لازم المستخدم يكون مسجل دخول
+  updateSubscriptionLimit,
+);
+
 router.delete("/delete/:userId", authenticate, deleteUser);
 
 router.get("/users", authenticate, getAllUsers);
