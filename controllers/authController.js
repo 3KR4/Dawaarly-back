@@ -431,6 +431,8 @@ exports.updateProfile = async (req, res) => {
   try {
     const userId = req.user.id;
 
+    console.log(req.body);
+
     const {
       full_name,
       phone,
@@ -444,20 +446,28 @@ exports.updateProfile = async (req, res) => {
       interests,
     } = req.body;
 
+    const cleanData = (obj) => {
+      return Object.fromEntries(
+        Object.entries(obj).filter(([_, v]) => v !== undefined),
+      );
+    };
+
+    const data = cleanData({
+      full_name,
+      phone,
+      gender,
+      birth_date: birth_date ? new Date(birth_date) : undefined,
+      country_id,
+      governorate_id,
+      city_id,
+      language,
+      theme,
+      interests,
+    });
+
     const user = await prisma.Users.update({
       where: { id: userId },
-      data: {
-        full_name,
-        phone,
-        gender,
-        birth_date: birth_date ? new Date(birth_date) : undefined,
-        country_id,
-        governorate_id,
-        city_id,
-        language,
-        theme,
-        interests,
-      },
+      data,
     });
 
     res.json({
@@ -465,6 +475,7 @@ exports.updateProfile = async (req, res) => {
       user: await serializeUser(user, req.user),
     });
   } catch (error) {
+    console.log(error);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -586,7 +597,6 @@ exports.changeUserRole = async (req, res) => {
         message: "Cannot change role of a super admin",
       });
     }
-    console.log("user_type:", user_type);
 
     // ---------------- قواعد التغيير ----------------
     if (user_type === "ADMIN") {

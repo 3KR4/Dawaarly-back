@@ -725,7 +725,6 @@ exports.getAllAds = async (req, res) => {
       } catch (err) {
         console.log("Invalid token", err);
       }
-      console.log("authHeader:", authHeader);
     }
     let statusFilter = { status: "ACTIVE" }; // default
 
