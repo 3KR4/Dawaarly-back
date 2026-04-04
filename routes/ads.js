@@ -16,26 +16,18 @@ const {
   authorizeOwnerOrSuperAdmin,
 } = require("../middlewares/authorizeOwnerOrSuperAdmin.js");
 const { authorize } = require("../middlewares/authorize.JS");
+const { optionalAuth } = require("../middlewares/optionalAuthMiddleware");
 
 // Ads CRUD
-router.post(
-  "/create",
-  authenticate,
-  authorize("ADMIN", "SUBUSER"),
-  createAd,
-);
+router.post("/create", authenticate, authorize("ADMIN", "SUBUSER"), createAd);
 router.put("/update/:adId", authenticate, authorizeOwnerOrSuperAdmin, updateAd);
-router.delete(
-  "/delete/:adId",
-  authenticate,
-  deleteAd,
-);
+router.delete("/delete/:adId", authenticate, deleteAd);
 router.patch("/update/:adId/status", authenticate, changeAdStatus);
 router.patch("/assign-admin/:adId", authenticate, assignAdmin);
 
 router.get("/all", getAllAds);
 router.get("/sections", getSectionsAds);
-router.get("/profile/:userId", getUserAds);
-router.get("/:adId", getAd); // 👈 دايماً في الآخر
+router.get("/profile/:userId", optionalAuth, getUserAds);
+router.get("/:adId", getAd);
 
 module.exports = router;

@@ -344,8 +344,7 @@ exports.changeAdStatus = async (req, res) => {
 
     // 🔹 التحقق من الصلاحيات
     if (!isAdmin) {
-      if (!isOwner)
-        return res.status(403).json({ message: "Access denied" });
+      if (!isOwner) return res.status(403).json({ message: "Access denied" });
 
       if (status !== "DISABLED") {
         return res.status(403).json({
@@ -542,16 +541,17 @@ function removeForeignKeys(ad) {
   } = ad;
   return cleaned;
 }
-// Helper: تحديد حالة الفيفوريت
+
 async function attachIsFavorite(tx, ad, userId) {
   if (!userId) return false;
-  const fav = await tx.adFavorite.findUnique({
+  const fav = await tx.AdFavorite.findUnique({
     where: {
       ad_id_user_id: { ad_id: ad.id, user_id: userId },
     },
   });
   return !!fav;
 }
+
 function formatAdResponse(ad) {
   // 🎯 1. ننظف الـ foreign keys أولاً
   const adWithoutForeignKeys = removeForeignKeys(ad);
@@ -588,6 +588,7 @@ function formatAdResponse(ad) {
     details: unitDetails,
   };
 }
+
 function formatAdListResponse(ad) {
   const details = {};
 
@@ -621,6 +622,7 @@ function formatAdListResponse(ad) {
     details,
   };
 }
+
 async function enrichAd(ad, userId, imageLength = "cover") {
   let fetchedImages = [];
 
@@ -642,7 +644,7 @@ async function enrichAd(ad, userId, imageLength = "cover") {
   }
 
   // عدد المفضلات
-  const favoritesCount = await prisma.adFavorite.count({
+  const favoritesCount = await prisma.AdFavorite.count({
     where: { ad_id: ad.id },
   });
 
@@ -660,6 +662,7 @@ async function enrichAd(ad, userId, imageLength = "cover") {
     isFavorite,
   };
 }
+
 exports.getAllAds = async (req, res) => {
   try {
     const {
@@ -726,9 +729,13 @@ exports.getAllAds = async (req, res) => {
         console.log("Invalid token", err);
       }
     }
-    let statusFilter = { status: "ACTIVE" }; // default
-
-    if (isAdmin) {
+    if (!isAdmin) {
+      statusFilter = {
+        status: {
+          in: ["ACTIVE", "BOOKED"],
+        },
+      };
+    } else {
       if (status && status.trim() !== "") {
         statusFilter = { status: status.trim() };
       } else {
@@ -860,6 +867,7 @@ exports.getAllAds = async (req, res) => {
     });
   }
 };
+
 exports.getAd = async (req, res) => {
   try {
     const adId = Number(req.params.adId);
@@ -946,6 +954,7 @@ exports.getAd = async (req, res) => {
     res.status(500).json({ message: "Server Error" });
   }
 };
+
 exports.getSectionsAds = async (req, res) => {
   try {
     const { type, value, page = 1, limit = 10 } = req.query;
@@ -1006,19 +1015,69 @@ exports.getSectionsAds = async (req, res) => {
     res.status(500).json({ message: "Server Error" });
   }
 };
+
 exports.getUserAds = async (req, res) => {
   try {
     const { userId } = req.params;
-    const { page = 1, limit = 10 } = req.query;
+    const { status, search, page = 1, limit = 10 } = req.query;
 
     const pageNumber = Number(page);
     const limitNumber = Number(limit);
     const skip = (pageNumber - 1) * limitNumber;
 
-    // نجيب كل الاعلانات الخاصة باليوزر سواء admin او subuser
+    const currentUser = req.user;
+
+    let isAdmin = false;
+    let isOwner = false;
+
+    if (currentUser) {
+      isAdmin = currentUser.user_type === "ADMIN";
+      isOwner = Number(userId) === currentUser.id;
+    }
+
+    const validStatuses = [
+      "ACTIVE",
+      "BOOKED",
+      "PENDING",
+      "REJECTED",
+      "SOLD",
+      "DISABLED",
+    ];
+
+    let statusFilter = {};
+
+    if (!isAdmin && !isOwner) {
+      statusFilter = {
+        status: {
+          in: ["ACTIVE", "BOOKED"],
+        },
+      };
+    } else {
+      if (
+        status &&
+        typeof status === "string" &&
+        status.trim() !== "" &&
+        validStatuses.includes(status.trim())
+      ) {
+        statusFilter = { status: status.trim() };
+      }
+    }
+    // ✅ search filter
+    const searchFilter = search
+      ? {
+          OR: [
+            { title: { contains: search, mode: "insensitive" } },
+            { description: { contains: search, mode: "insensitive" } },
+            { tags: { has: search } },
+          ],
+        }
+      : {};
+
+    // ✅ final where condition
     const whereCondition = {
       OR: [{ admin_id: Number(userId) }, { subuser_id: Number(userId) }],
-      status: "ACTIVE", // بس الاعلانات النشطة
+      ...statusFilter,
+      ...searchFilter,
     };
 
     const [ads, totalCount] = await Promise.all([
@@ -1059,27 +1118,27 @@ exports.toggleFavorite = async (req, res) => {
     if (!ad) return res.status(404).json({ message: "Ad not found" });
 
     // نتحقق هل الإعلان موجود في المفضلة
-    const existing = await prisma.adFavorite.findUnique({
+    const existing = await prisma.AdFavorite.findUnique({
       where: { ad_id_user_id: { ad_id: adId, user_id: userId } },
     });
 
     let message;
     if (existing) {
       // لو موجود، نحذفه
-      await prisma.adFavorite.delete({
+      await prisma.AdFavorite.delete({
         where: { ad_id_user_id: { ad_id: adId, user_id: userId } },
       });
       message = "Removed from favorites";
     } else {
       // لو مش موجود، نضيفه
-      await prisma.adFavorite.create({
+      await prisma.AdFavorite.create({
         data: { ad_id: adId, user_id: userId },
       });
       message = "Added to favorites";
     }
 
     // تحديث عدد المفضلات في الإعلان
-    const favoritesCount = await prisma.adFavorite.count({
+    const favoritesCount = await prisma.AdFavorite.count({
       where: { ad_id: adId },
     });
 
@@ -1089,6 +1148,7 @@ exports.toggleFavorite = async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 };
+
 exports.getFavorites = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -1100,7 +1160,7 @@ exports.getFavorites = async (req, res) => {
 
     // ✅ جلب المفضلات مع الإعلانات (من غير images)
     const [favorites, totalCount] = await Promise.all([
-      prisma.adFavorite.findMany({
+      prisma.AdFavorite.findMany({
         where: { user_id: userId },
         skip,
         take: limitNumber,
@@ -1147,7 +1207,7 @@ exports.getFavorites = async (req, res) => {
           },
         },
       }),
-      prisma.adFavorite.count({ where: { user_id: userId } }),
+      prisma.AdFavorite.count({ where: { user_id: userId } }),
     ]);
 
     // ✅ تنسيق كل إعلان باستخدام enrichAd (نفس اللي في getSectionsAds)

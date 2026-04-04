@@ -279,6 +279,9 @@ exports.verifyEmail = [
     const user = await prisma.Users.findUnique({ where: { email } });
 
     if (!user) return res.status(404).json({ message: "User not found" });
+    console.log("user.verification_code: ", user.verification_code);
+    console.log("code: ", code);
+    console.log("user.verification_expiry: ", user.verification_expiry);
 
     if (
       user.verification_code !== code ||
