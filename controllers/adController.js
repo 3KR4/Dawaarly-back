@@ -958,7 +958,6 @@ exports.getAd = async (req, res) => {
 exports.getSectionsAds = async (req, res) => {
   try {
     const { type, value, page = 1, limit = 10 } = req.query;
-
     const pageNumber = Number(page);
     const limitNumber = Number(limit);
     const skip = (pageNumber - 1) * limitNumber;
@@ -992,22 +991,29 @@ exports.getSectionsAds = async (req, res) => {
       where.city_id = Number(value);
     }
 
-    const ads = await prisma.D_Vacation.findMany({
-      where,
-      skip,
-      take: limitNumber,
-      orderBy: { featured_priority: "desc" },
-      include: adIncludeListRelations,
-    });
+    const [ads, totalCount] = await Promise.all([
+      prisma.D_Vacation.findMany({
+        where: whereCondition,
+        skip,
+        take: limitNumber,
+        orderBy: { created_at: "desc" },
+        include: adIncludeListRelations,
+      }),
+
+      prisma.D_Vacation.count({
+        where: whereCondition,
+      }),
+    ]);
 
     const cleanedAds = await Promise.all(ads.map((ad) => enrichAd(ad)));
 
     res.json({
       data: cleanedAds,
       pagination: {
+        total: totalCount,
         page: pageNumber,
         limit: limitNumber,
-        count: cleanedAds.length,
+        totalPages: Math.ceil(totalCount / limitNumber),
       },
     });
   } catch (err) {
