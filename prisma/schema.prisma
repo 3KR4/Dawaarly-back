@@ -354,8 +354,6 @@ enum AdStatus {
   PENDING
   ACTIVE
   REJECTED
-  SOLD
-  BOOKED
   DISABLED
 }
 

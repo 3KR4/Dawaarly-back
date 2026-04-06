@@ -330,13 +330,7 @@ exports.changeAdStatus = async (req, res) => {
       ad.admin_id === req.user.id || ad.subuser_id === req.user.id;
 
     // 🔹 الحالات المسموحة
-    const allowedStatuses = [
-      "ACTIVE",
-      "REJECTED",
-      "DISABLED",
-      "SOLD",
-      "BOOKED",
-    ];
+    const allowedStatuses = ["ACTIVE", "REJECTED", "DISABLED"];
 
     if (!allowedStatuses.includes(status)) {
       return res.status(400).json({ message: "Invalid status" });
@@ -543,6 +537,10 @@ function removeForeignKeys(ad) {
 }
 
 async function attachIsFavorite(tx, ad, userId) {
+  console.log("tx:", tx);
+  console.log("ad:", ad);
+  console.log("userId:", userId);
+
   if (!userId) return false;
   const fav = await tx.AdFavorite.findUnique({
     where: {
@@ -617,7 +615,8 @@ function formatAdListResponse(ad) {
     compound: ad.compound,
     Categories: ad.Categories,
     SubCategories: ad.SubCategories,
-
+    views_count: ad.views_count,
+    reach_count: ad.reach_count,
     image: firstImage,
     details,
   };
@@ -731,9 +730,7 @@ exports.getAllAds = async (req, res) => {
     }
     if (!isAdmin) {
       statusFilter = {
-        status: {
-          in: ["ACTIVE", "BOOKED"],
-        },
+        status: "ACTIVE",
       };
     } else {
       if (status && status.trim() !== "") {
@@ -956,13 +953,16 @@ exports.getAd = async (req, res) => {
 };
 
 exports.getSectionsAds = async (req, res) => {
+  const userId = req.user?.id || null;
+
   try {
     const { type, value, page = 1, limit = 10 } = req.query;
-    const pageNumber = Number(page);
-    const limitNumber = Number(limit);
+
+    const pageNumber = Math.max(1, Number(page));
+    const limitNumber = Math.max(1, Number(limit));
     const skip = (pageNumber - 1) * limitNumber;
 
-    const allowedTypes = ["category", "city", "subCategory", "governorate"];
+    const allowedTypes = ["category", "subCategory", "governorate", "city"];
 
     if (type && !allowedTypes.includes(type)) {
       return res.status(400).json({ message: "Invalid type" });
@@ -972,6 +972,7 @@ exports.getSectionsAds = async (req, res) => {
       return res.status(400).json({ message: "Value is required with type" });
     }
 
+    // 👇 ده الـ where الصح
     const where = {
       status: "ACTIVE",
     };
@@ -987,13 +988,14 @@ exports.getSectionsAds = async (req, res) => {
     if (type === "governorate") {
       where.governorate_id = Number(value);
     }
+
     if (type === "city") {
       where.city_id = Number(value);
     }
 
     const [ads, totalCount] = await Promise.all([
       prisma.D_Vacation.findMany({
-        where: whereCondition,
+        where, // ✅ كان الخطأ هنا
         skip,
         take: limitNumber,
         orderBy: { created_at: "desc" },
@@ -1001,13 +1003,13 @@ exports.getSectionsAds = async (req, res) => {
       }),
 
       prisma.D_Vacation.count({
-        where: whereCondition,
+        where, // ✅ نفس الغلطة هنا
       }),
     ]);
 
-    const cleanedAds = await Promise.all(ads.map((ad) => enrichAd(ad)));
+    const cleanedAds = await Promise.all(ads.map((ad) => enrichAd(ad, userId)));
 
-    res.json({
+    return res.json({
       data: cleanedAds,
       pagination: {
         total: totalCount,
@@ -1018,7 +1020,7 @@ exports.getSectionsAds = async (req, res) => {
     });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: "Server Error" });
+    return res.status(500).json({ message: "Server Error" });
   }
 };
 
@@ -1041,22 +1043,13 @@ exports.getUserAds = async (req, res) => {
       isOwner = Number(userId) === currentUser.id;
     }
 
-    const validStatuses = [
-      "ACTIVE",
-      "BOOKED",
-      "PENDING",
-      "REJECTED",
-      "SOLD",
-      "DISABLED",
-    ];
+    const validStatuses = ["ACTIVE", "PENDING", "REJECTED", "DISABLED"];
 
     let statusFilter = {};
 
     if (!isAdmin && !isOwner) {
       statusFilter = {
-        status: {
-          in: ["ACTIVE", "BOOKED"],
-        },
+        status: "ACTIVE",
       };
     } else {
       if (

@@ -5,7 +5,7 @@ const getRandom = (arr) => arr[Math.floor(Math.random() * arr.length)];
 const getRandomInt = (min, max) =>
   Math.floor(Math.random() * (max - min + 1)) + min;
 
-const statuses = ["ACTIVE", "SOLD", "BOOKED"];
+const statuses = ["ACTIVE"];
 const currencies = ["EGP", "USD", "SAR", "AED"];
 const rentFrequencies = ["DAY", "WEEK", "MONTH"];
 

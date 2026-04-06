@@ -25,9 +25,9 @@ router.delete("/delete/:adId", authenticate, deleteAd);
 router.patch("/update/:adId/status", authenticate, changeAdStatus);
 router.patch("/assign-admin/:adId", authenticate, assignAdmin);
 
-router.get("/all", getAllAds);
-router.get("/sections", getSectionsAds);
+router.get("/all", optionalAuth, getAllAds);
+router.get("/sections", optionalAuth, getSectionsAds);
 router.get("/profile/:userId", optionalAuth, getUserAds);
-router.get("/:adId", getAd);
+router.get("/:adId", optionalAuth, getAd);
 
 module.exports = router;
