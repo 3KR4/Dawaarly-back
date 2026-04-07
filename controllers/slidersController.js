@@ -3,17 +3,27 @@ const prisma = new PrismaClient();
 
 exports.createSlider = async (req, res) => {
   try {
-    const { title, description, link } = req.body;
+    const {
+      name_en,
+      name_ar,
+      description_en,
+      description_ar,
+      link,
+      is_active = true,
+    } = req.body;
 
     const slider = await prisma.Sliders.create({
       data: {
-        title,
-        description,
+        name_en,
+        name_ar,
+        description_en,
+        description_ar,
         link,
+        is_active,
       },
     });
 
-    res.json(slider);
+    res.status(201).json(slider);
   } catch (error) {
     res.status(500).json({
       message: "Server error",
@@ -24,33 +34,41 @@ exports.createSlider = async (req, res) => {
 exports.updateSlider = async (req, res) => {
   try {
     const { id } = req.params;
-    const { title, description, link, is_active } = req.body;
+
+    const {
+      name_en,
+      name_ar,
+      description_en,
+      description_ar,
+      link,
+      is_active,
+    } = req.body;
 
     const sliderId = Number(id);
 
-    // التأكد إن السلايدر موجود
-    const existingSlider = await prisma.Sliders.findUnique({
+    const existing = await prisma.Sliders.findUnique({
       where: { id: sliderId },
     });
 
-    if (!existingSlider) {
+    if (!existing) {
       return res.status(404).json({
         message: "Slider not found",
       });
     }
 
-    // تحديث السلايدر
-    const updatedSlider = await prisma.Sliders.update({
+    const updated = await prisma.Sliders.update({
       where: { id: sliderId },
       data: {
-        title,
-        description,
+        name_en,
+        name_ar,
+        description_en,
+        description_ar,
         link,
         is_active,
       },
     });
 
-    res.status(200).json(updatedSlider);
+    res.json(updated);
   } catch (error) {
     res.status(500).json({
       message: "Server error",
@@ -58,7 +76,6 @@ exports.updateSlider = async (req, res) => {
     });
   }
 };
-
 exports.deleteSlider = async (req, res) => {
   try {
     const { id } = req.params;
@@ -77,16 +94,66 @@ exports.deleteSlider = async (req, res) => {
     });
   }
 };
-exports.getSliders = async (req, res) => {
+exports.getOneSlider = async (req, res) => {
   try {
-    const sliders = await prisma.Sliders.findMany({
+    const { id } = req.params;
+
+    const slider = await prisma.Sliders.findUnique({
+      where: { id: Number(id) },
+    });
+
+    if (!slider) {
+      return res.status(404).json({
+        message: "Slider not found",
+      });
+    }
+
+    const image = await prisma.Images.findFirst({
       where: {
-        is_active: true,
+        entity_type: "SLIDER",
+        entity_id: slider.id,
       },
       orderBy: {
-        created_at: "desc",
+        order: "asc",
       },
     });
+
+    res.json({
+      ...slider,
+      image: image || null,
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Server error",
+      error: error.message,
+    });
+  }
+};
+exports.getSliders = async (req, res) => {
+  try {
+    const { page = 1, limit = 10 } = req.query;
+
+    const pageNumber = Number(page);
+    const limitNumber = Number(limit);
+
+    const skip = (pageNumber - 1) * limitNumber;
+
+    const where = {
+      is_active: true,
+    };
+
+    const [sliders, total] = await Promise.all([
+      prisma.Sliders.findMany({
+        where,
+        skip,
+        take: limitNumber,
+        orderBy: {
+          created_at: "desc",
+        },
+      }),
+
+      prisma.Sliders.count({ where }),
+    ]);
 
     const sliderIds = sliders.map((s) => s.id);
 
@@ -103,17 +170,28 @@ exports.getSliders = async (req, res) => {
     });
 
     const formatted = sliders.map((slider) => {
-      const sliderImages = images.filter(
-        (img) => img.entity_id === slider.id
-      );
+      const imagesMap = {};
+      images.forEach((img) => {
+        if (!imagesMap[img.entity_id]) {
+          imagesMap[img.entity_id] = img;
+        }
+      });
 
       return {
         ...slider,
-        image: sliderImages[0] || null,
+        image: imagesMap[slider.id] || null
       };
     });
 
-    res.json(formatted);
+    res.json({
+      data: formatted,
+      pagination: {
+        total,
+        page: pageNumber,
+        limit: limitNumber,
+        totalPages: Math.ceil(total / limitNumber),
+      },
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({
