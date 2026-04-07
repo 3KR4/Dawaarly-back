@@ -537,9 +537,6 @@ function removeForeignKeys(ad) {
 }
 
 async function attachIsFavorite(tx, ad, userId) {
-  console.log("tx:", tx);
-  console.log("ad:", ad);
-  console.log("userId:", userId);
 
   if (!userId) return false;
   const fav = await tx.AdFavorite.findUnique({
@@ -682,18 +679,12 @@ exports.getAllAds = async (req, res) => {
       rent_frequency,
       min_deposit_amount,
       max_deposit_amount,
-      min_rent_period,
-      max_rent_period,
       min_bedrooms,
       max_bedrooms,
       min_bathrooms,
       max_bathrooms,
       min_level,
       max_level,
-      min_adult_no_max,
-      max_adult_no_max,
-      min_child_no_max,
-      max_child_no_max,
       am_pool,
       am_balcony,
       am_private_garden,
@@ -779,13 +770,6 @@ exports.getAllAds = async (req, res) => {
         ? { deposit_amount: { lte: Number(max_deposit_amount) } }
         : {},
 
-      min_rent_period
-        ? { min_rent_period: { gte: Number(min_rent_period) } }
-        : {},
-      max_rent_period
-        ? { min_rent_period: { lte: Number(max_rent_period) } }
-        : {},
-
       min_bedrooms ? { bedrooms: { gte: Number(min_bedrooms) } } : {},
       max_bedrooms ? { bedrooms: { lte: Number(max_bedrooms) } } : {},
 
@@ -794,20 +778,6 @@ exports.getAllAds = async (req, res) => {
 
       min_level ? { level: { gte: Number(min_level) } } : {},
       max_level ? { level: { lte: Number(max_level) } } : {},
-
-      min_adult_no_max
-        ? { adult_no_max: { gte: Number(min_adult_no_max) } }
-        : {},
-      max_adult_no_max
-        ? { adult_no_max: { lte: Number(max_adult_no_max) } }
-        : {},
-
-      min_child_no_max
-        ? { child_no_max: { gte: Number(min_child_no_max) } }
-        : {},
-      max_child_no_max
-        ? { child_no_max: { lte: Number(max_child_no_max) } }
-        : {},
 
       am_pool !== undefined ? { am_pool: am_pool === "true" } : {},
       am_balcony !== undefined ? { am_balcony: am_balcony === "true" } : {},

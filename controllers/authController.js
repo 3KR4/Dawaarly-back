@@ -279,9 +279,6 @@ exports.verifyEmail = [
     const user = await prisma.Users.findUnique({ where: { email } });
 
     if (!user) return res.status(404).json({ message: "User not found" });
-    console.log("user.verification_code: ", user.verification_code);
-    console.log("code: ", code);
-    console.log("user.verification_expiry: ", user.verification_expiry);
 
     if (
       user.verification_code !== code ||
@@ -368,51 +365,60 @@ exports.resendOTP = [
     }
   },
 ];
-// POST /api/auth/forgot-password
-exports.forgotPassword = [
-  otpLimiter,
-  async (req, res) => {
+exports.forgotPassword = async (req, res) => {
+  try {
     const { email } = req.body;
     const user = await prisma.Users.findUnique({ where: { email } });
 
     if (!user) return res.status(404).json({ message: "User not found" });
 
-    // تحقق من الوقت لو عمل resend
-    const now = new Date();
-    if (
-      user.reset_password_expiry &&
-      now - user.reset_password_expiry < 60 * 1000
-    ) {
-      return res.status(429).json({ message: "Wait before requesting again" });
+    // ================== تحقق من الوقت لو عمل resend ==================
+    const now = new Date(); // توقيت الجهاز الحالي
+    if (user.reset_password_expiry) {
+      const lastRequest = new Date(user.reset_password_expiry.getTime() - 10 * 60 * 1000); // آخر مرة تم فيها إنشاء الكود
+      if (now - lastRequest < 60 * 1000) {
+        return res
+          .status(429)
+          .json({ message: "Please wait at least 1 minute before requesting again" });
+      }
     }
+
+    // ================== إنشاء OTP ==================
     const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
-    const expiry = new Date(Date.now() + 10 * 60 * 1000); // 10 دقائق
+    const expiry = new Date(Date.now() + 10 * 60 * 1000); // صلاحية 10 دقائق
 
     await prisma.Users.update({
       where: { email },
       data: { reset_password_code: resetCode, reset_password_expiry: expiry },
     });
 
-    await sendVerificationEmail(email, resetCode); // نفس الدالة عندك
+    await sendVerificationEmail(email, resetCode); // إرسال OTP
 
     res.json({ message: "OTP sent to your email" });
-  },
-];
-// POST /api/auth/reset-password
+  } catch (err) {
+    console.log(err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
 exports.resetPassword = async (req, res) => {
   try {
     const { email, new_password, otp } = req.body;
     const user = await prisma.Users.findUnique({ where: { email } });
+
     if (!user) return res.status(404).json({ message: "User not found" });
 
+    const now = new Date(); // توقيت الجهاز الحالي
+
+    // ================== تحقق من صحة OTP ==================
     if (
       user.reset_password_code !== otp ||
       !user.reset_password_expiry ||
-      new Date() > user.reset_password_expiry
+      now > user.reset_password_expiry
     ) {
       return res.status(400).json({ message: "Invalid or expired OTP" });
     }
 
+    // ================== تشفير كلمة السر الجديدة ==================
     const hashedNewPassword = await bcrypt.hash(new_password, 10);
 
     await prisma.Users.update({
@@ -433,8 +439,6 @@ exports.resetPassword = async (req, res) => {
 exports.updateProfile = async (req, res) => {
   try {
     const userId = req.user.id;
-
-    console.log(req.body);
 
     const {
       full_name,
