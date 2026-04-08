@@ -375,11 +375,13 @@ exports.forgotPassword = async (req, res) => {
     // ================== تحقق من الوقت لو عمل resend ==================
     const now = new Date(); // توقيت الجهاز الحالي
     if (user.reset_password_expiry) {
-      const lastRequest = new Date(user.reset_password_expiry.getTime() - 10 * 60 * 1000); // آخر مرة تم فيها إنشاء الكود
+      const lastRequest = new Date(
+        user.reset_password_expiry.getTime() - 10 * 60 * 1000,
+      ); // آخر مرة تم فيها إنشاء الكود
       if (now - lastRequest < 60 * 1000) {
-        return res
-          .status(429)
-          .json({ message: "Please wait at least 1 minute before requesting again" });
+        return res.status(429).json({
+          message: "Please wait at least 1 minute before requesting again",
+        });
       }
     }
 
@@ -880,20 +882,23 @@ exports.getAllUsers = async (req, res) => {
     const userIds = users.map((u) => u.id);
 
     const activeAdsCounts = await prisma.D_Vacation.groupBy({
-      by: ["admin_id"],
+      by: ["admin_id", "subuser_id"],
       where: {
-        admin_id: { in: userIds },
         status: "ACTIVE",
+        OR: [{ admin_id: { in: userIds } }, { subuser_id: { in: userIds } }],
       },
       _count: { id: true },
     });
 
     const countsMap = {};
 
+    // احسب لكل واحد سواء admin او subuser
     activeAdsCounts.forEach((c) => {
-      countsMap[c.admin_id] = c._count.id;
+      if (c.admin_id)
+        countsMap[c.admin_id] = (countsMap[c.admin_id] || 0) + c._count.id;
+      if (c.subuser_id)
+        countsMap[c.subuser_id] = (countsMap[c.subuser_id] || 0) + c._count.id;
     });
-
     const serializedUsers = await Promise.all(
       users.map(async (u) => {
         const base = await serializeUser(u, requester);

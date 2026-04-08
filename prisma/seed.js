@@ -4,11 +4,13 @@ const prisma = new PrismaClient();
 const getRandom = (arr) => arr[Math.floor(Math.random() * arr.length)];
 const getRandomInt = (min, max) =>
   Math.floor(Math.random() * (max - min + 1)) + min;
-
-const statuses = ["ACTIVE"];
 const currencies = ["EGP", "USD", "SAR", "AED"];
 const rentFrequencies = ["DAY", "WEEK", "MONTH"];
-
+function getWeightedPriority() {
+  // 80% chance to be 0, 20% chance to be 1-10
+  if (Math.random() < 0.8) return 0;
+  return Math.floor(Math.random() * 10) + 1;
+}
 const categories = {
   1: [1, 2, 3, 4, 5], // Apartments
   2: [6, 7, 8, 9], // Villas
@@ -130,9 +132,40 @@ const governoratesMap = {
   5: [40, 41], // Red Sea
   6: [50, 51],
 };
+const realEstateTags = [
+  "featured", // مميز
+  "hot", // ترند
+  "new", // جديد
+  "luxury", // فاخر
+  "sea_view", // إطلالة بحر
+  "garden", // حديقة
+  "furnished", // مفروش
+  "semi_furnished", // نصف مفروش
+  "ready_to_move", // جاهز للسكن
+  "under_construction", // تحت الإنشاء
+  "investment", // استثمار
+  "family", // مناسب عائلات
+  "studio", // ستوديو
+  "penthouse", // بنتهاوس
+  "duplex", // دوبلكس
+  "corner_unit", // ناصية
+  "prime_location", // موقع مميز
+];
+function getRandomPastDate(monthsBack = 7) {
+  const now = new Date();
+  const pastDate = new Date(
+    now.getFullYear(),
+    now.getMonth() - Math.floor(Math.random() * monthsBack),
+    Math.floor(Math.random() * 28) + 1, // يوم عشوائي من 1 لـ 28
+    Math.floor(Math.random() * 24),      // ساعة عشوائية
+    Math.floor(Math.random() * 60),      // دقيقة
+    Math.floor(Math.random() * 60)       // ثانية
+  );
+  return pastDate;
+}
 
 function getRandomInterests() {
-  const count = getRandomInt(1, 4); // كل يوزر عنده 1 لـ 3 اهتمامات
+  const count = getRandomInt(1, 6); // كل يوزر عنده 1 لـ 3 اهتمامات
   const shuffled = [...allSubCategories].sort(() => 0.5 - Math.random());
   return shuffled.slice(0, count);
 }
@@ -7899,7 +7932,6 @@ async function main() {
     ],
     skipDuplicates: true,
   });
-  console.log("✅ Seed completed successfully");
 
   async function seedVacations() {
     const data = [];
@@ -7910,14 +7942,13 @@ async function main() {
       const subCategoryId = getRandom(subCategoryList);
 
       const governorate_id = getRandomInt(1, 5);
-      const city_id = getRandomInt(1, 20); // قللناها شوية realistic
+      const city_id = getRandomInt(1, 20);
 
       data.push({
-        // ✅ Sequential بدل random
         title: titles[i],
         description: descriptions[i],
 
-        status: getRandom(statuses),
+        status: "ACTIVE",
 
         admin_id: getRandom(adminIds),
         subuser_id: getRandom(subuserIds),
@@ -7938,17 +7969,15 @@ async function main() {
         min_rent_period_unit: getRandom(rentFrequencies),
 
         bedrooms: getRandomInt(1, 5),
-        bathrooms: getRandomInt(1, 3),
+        bathrooms: getRandomInt(1, 5),
         level: getRandomInt(0, 10),
 
         adult_no_max: getRandomInt(1, 6),
         child_no_max: getRandomInt(0, 4),
 
-        // ✅ تواريخ مختلفة لكل إعلان
         available_from: new Date(Date.now() + i * 86400000),
         available_to: new Date(Date.now() + (i + 30) * 86400000),
 
-        // Amenities
         am_pool: Math.random() > 0.5,
         am_ac: Math.random() > 0.5,
         am_gym: Math.random() > 0.5,
@@ -7956,14 +7985,14 @@ async function main() {
         am_balcony: Math.random() > 0.5,
         am_kitchen: true,
 
-        tags: ["featured", "hot", "new"].filter(() => Math.random() > 0.5),
+        tags: realEstateTags.filter(() => Math.random() > 0.7),
 
-        featured_priority: getRandomInt(0, 5),
-        views_count: getRandomInt(0, 1000),
-        reach_count: getRandomInt(0, 2000),
-        favorites_count: getRandomInt(0, 300),
+        featured_priority: getWeightedPriority(),
+        views_count: getRandomInt(0, 3000),
+        reach_count: getRandomInt(0, 800),
+        favorites_count: getRandomInt(0, 60),
 
-        created_at: new Date(),
+        created_at: getRandomPastDate(7),
       });
     }
 
@@ -7971,7 +8000,6 @@ async function main() {
       data,
     });
 
-    console.log("✅ 50 Vacation Ads Created");
   }
 
   const admins = await prisma.users.findMany({
@@ -7989,125 +8017,145 @@ async function main() {
 
   const subuserIds = subusers.map((s) => s.id);
   const adminIds = admins.map((a) => a.id);
-  async function seedUsers() {
-    const users = [];
+const firstNames = [
+  "Ahmed", "Mohamed", "Sara", "Fatma", "Omar", "Laila", "Youssef", "Mona",
+  "Khaled", "Nour", "Ali", "Dina", "Hany", "Mariam", "Tamer", "Noha"
+];
 
-    // ---------------- NORMAL USERS ----------------
-    for (let i = 1; i <= 30; i++) {
-      const governorate_id = getRandom(
-        Object.keys(governoratesMap).map(Number),
-      );
-      const city_id = getRandom(governoratesMap[governorate_id]);
+const lastNames = [
+  "Hassan", "Ibrahim", "Fahmy", "Saeed", "Mahmoud", "El-Sayed", "Kamal",
+  "Farid", "Naguib", "Shawky"
+];
 
-      users.push({
-        full_name: `User ${i}`,
-        email: `user${i}@test.com`,
-        phone: `010000000${i.toString().padStart(2, "0")}`,
-        password: "123456",
-        user_type: "USER",
+function getRandomName() {
+  const first = firstNames[Math.floor(Math.random() * firstNames.length)];
+  const last = lastNames[Math.floor(Math.random() * lastNames.length)];
+  return `${first} ${last}`;
+}
 
-        country_id: 1,
-        governorate_id,
-        city_id,
+function getRandomEmail(fullName) {
+  const namePart = fullName.toLowerCase().replace(" ", ".");
+  const number = Math.floor(Math.random() * 1000);
+  return `${namePart}${number}@example.com`;
+}
 
-        interests: getRandomInterests(),
-      });
-    }
+function getRandomPhone() {
+  // أرقام مصرية شائعة: 010, 011, 012, 015
+  const prefixes = ["010", "011", "012", "015"];
+  const prefix = prefixes[Math.floor(Math.random() * prefixes.length)];
+  const number = Math.floor(10000000 + Math.random() * 90000000);
+  return `${prefix}${number}`;
+}
 
-    // ---------------- SUB USERS ----------------
-    for (let i = 1; i <= 10; i++) {
-      const governorate_id = getRandom(
-        Object.keys(governoratesMap).map(Number),
-      );
-      const city_id = getRandom(governoratesMap[governorate_id]);
+async function seedUsers() {
+  const users = [];
 
-      users.push({
-        full_name: `SubUser ${i}`,
-        email: `subuser${i}@test.com`,
-        phone: `011000000${i.toString().padStart(2, "0")}`,
-        password: "123456",
-        user_type: "SUBUSER",
+  // ---------------- NORMAL USERS ----------------
+  for (let i = 0; i < 30; i++) {
+    const full_name = getRandomName();
+    const governorate_id = getRandom(Object.keys(governoratesMap).map(Number));
+    const city_id = getRandom(governoratesMap[governorate_id]);
 
-        country_id: 1,
-        governorate_id,
-        city_id,
-
-        interests: getRandomInterests(),
-      });
-    }
-
-    // ---------------- SUPER ADMIN ----------------
     users.push({
-      full_name: "Super Admin",
-      email: "superadmin@test.com",
-      phone: "01200000000",
+      full_name,
+      email: getRandomEmail(full_name),
+      phone: getRandomPhone(),
+      password: "123456",
+      user_type: "USER",
+      country_id: 1,
+      governorate_id,
+      city_id,
+      interests: getRandomInterests(),
+    });
+  }
+
+  // ---------------- SUB USERS ----------------
+  for (let i = 0; i < 10; i++) {
+    const full_name = getRandomName();
+    const governorate_id = getRandom(Object.keys(governoratesMap).map(Number));
+    const city_id = getRandom(governoratesMap[governorate_id]);
+
+    users.push({
+      full_name,
+      email: getRandomEmail(full_name),
+      phone: getRandomPhone(),
+      password: "123456",
+      user_type: "SUBUSER",
+      country_id: 1,
+      governorate_id,
+      city_id,
+      interests: getRandomInterests(),
+    });
+  }
+
+  // ---------------- SUPER ADMIN ----------------
+  const superAdminName = "Super Admin";
+  users.push({
+    full_name: superAdminName,
+    email: "superadmin@example.com",
+    phone: "01200000000",
+    password: "123456",
+    user_type: "ADMIN",
+    is_super_admin: true,
+    country_id: 1,
+    governorate_id: 1,
+    city_id: 1,
+    interests: allSubCategories,
+  });
+
+  // ---------------- ADMINS WITH PERMISSIONS ----------------
+  const adminData = [
+    {
+      full_name: "Admin Full Control",
+      email: "admin1@example.com",
+      phone: "01200000001",
+      permissions: [
+        "CREATE_AD", "DELETE_AD", "UPDATE_AD", "BOOKINGS",
+        "SLIDERS", "VIEW_ANALYTICS", "CHANGE_ADS_STATUS", "ASSIGN_RESPONSIBILITY"
+      ],
+      governorate_id: 2,
+      city_id: 10,
+    },
+    {
+      full_name: "Admin Content",
+      email: "admin2@example.com",
+      phone: "01200000002",
+      permissions: ["CREATE_AD", "UPDATE_AD", "CHANGE_ADS_STATUS"],
+      governorate_id: 3,
+      city_id: 20,
+    },
+    {
+      full_name: "Admin Analytics",
+      email: "admin3@example.com",
+      phone: "01200000003",
+      permissions: ["VIEW_ANALYTICS", "BOOKINGS"],
+      governorate_id: 1,
+      city_id: 2,
+    },
+  ];
+
+  adminData.forEach((a) => {
+    users.push({
+      full_name: a.full_name,
+      email: a.email,
+      phone: a.phone,
       password: "123456",
       user_type: "ADMIN",
-      is_super_admin: true,
-
+      permissions: a.permissions,
       country_id: 1,
-      governorate_id: 1,
-      city_id: 1,
-
-      interests: allSubCategories, // كل الاهتمامات
+      governorate_id: a.governorate_id,
+      city_id: a.city_id,
+      interests: getRandomInterests(),
     });
+  });
 
-    // ---------------- ADMINS WITH PERMISSIONS ----------------
-    users.push(
-      {
-        full_name: "Admin Full Control",
-        email: "admin1@test.com",
-        phone: "01200000001",
-        password: "123456",
-        user_type: "ADMIN",
-        permissions: [
-          "CREATE_AD",
-          "DELETE_AD",
-          "UPDATE_AD",
-          "BOOKINGS",
-          "SLIDERS",
-          "VIEW_ANALYTICS",
-          "CHANGE_ADS_STATUS",
-          "ASSIGN_RESPONSIBILITY",
-        ],
-        country_id: 1,
-        governorate_id: 2,
-        city_id: 10,
-        interests: getRandomInterests(),
-      },
-      {
-        full_name: "Admin Content",
-        email: "admin2@test.com",
-        phone: "01200000002",
-        password: "123456",
-        user_type: "ADMIN",
-        permissions: ["CREATE_AD", "UPDATE_AD", "CHANGE_ADS_STATUS"],
-        country_id: 1,
-        governorate_id: 3,
-        city_id: 20,
-        interests: getRandomInterests(),
-      },
-      {
-        full_name: "Admin Analytics",
-        email: "admin3@test.com",
-        phone: "01200000003",
-        password: "123456",
-        user_type: "ADMIN",
-        permissions: ["VIEW_ANALYTICS", "BOOKINGS"],
-        country_id: 1,
-        governorate_id: 1,
-        city_id: 2,
-        interests: getRandomInterests(),
-      },
-    );
+  await prisma.users.createMany({
+    data: users,
+    skipDuplicates: true,
+  });
 
-    await prisma.users.createMany({
-      data: users,
-      skipDuplicates: true,
-    });
-
-    console.log("✅ Advanced Users Seeded");
-  }
+  console.log("✅ Users seeded with realistic names, emails, and phones");
+}
 
   seedUsers();
   seedVacations()
