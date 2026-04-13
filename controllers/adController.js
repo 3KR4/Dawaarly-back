@@ -348,7 +348,7 @@ exports.changeAdStatus = async (req, res) => {
     }
 
     // 🔹 إذا الحالة REJECTED نحتاج السبب
-    let rejectReason;
+    let reject_reason;
     if (status === "REJECTED") {
       if (!isAdmin)
         return res.status(403).json({
@@ -360,7 +360,7 @@ exports.changeAdStatus = async (req, res) => {
           message: "Reason required for rejection",
         });
 
-      rejectReason = reason;
+      reject_reason = reason;
     }
 
     // 🔹 تحديث الإعلان
@@ -368,7 +368,7 @@ exports.changeAdStatus = async (req, res) => {
       where: { id: Number(adId) },
       data: {
         status,
-        ...(rejectReason && { rejectReason }), // فقط لو REJECTED
+        ...(reject_reason && { reject_reason }), // فقط لو REJECTED
       },
     });
 
@@ -537,7 +537,6 @@ function removeForeignKeys(ad) {
 }
 
 async function attachIsFavorite(tx, ad, userId) {
-
   if (!userId) return false;
   const fav = await tx.AdFavorite.findUnique({
     where: {
@@ -614,6 +613,7 @@ function formatAdListResponse(ad) {
     SubCategories: ad.SubCategories,
     views_count: ad.views_count,
     reach_count: ad.reach_count,
+    favorites_count: ad.favorites_count,
     image: firstImage,
     details,
   };
@@ -639,11 +639,6 @@ async function enrichAd(ad, userId, imageLength = "cover") {
     }
   }
 
-  // عدد المفضلات
-  const favoritesCount = await prisma.AdFavorite.count({
-    where: { ad_id: ad.id },
-  });
-
   // هل هو في المفضلة للمستخدم الحالي
   const isFavorite = await attachIsFavorite(prisma, ad, userId);
 
@@ -654,7 +649,6 @@ async function enrichAd(ad, userId, imageLength = "cover") {
   return {
     ...formattedAd,
     image: fetchedImages,
-    favoritesCount,
     isFavorite,
   };
 }
@@ -932,7 +926,7 @@ exports.getSectionsAds = async (req, res) => {
     const limitNumber = Math.max(1, Number(limit));
     const skip = (pageNumber - 1) * limitNumber;
 
-    const allowedTypes = ["category", "subCategory", "governorate", "city"];
+    const allowedTypes = ["category", "subCategory", "governorate", "city", "compound"];
 
     if (type && !allowedTypes.includes(type)) {
       return res.status(400).json({ message: "Invalid type" });
@@ -961,6 +955,9 @@ exports.getSectionsAds = async (req, res) => {
 
     if (type === "city") {
       where.city_id = Number(value);
+    }
+    if (type === "compound") {
+      where.compound_id = Number(value);
     }
 
     const [ads, totalCount] = await Promise.all([
@@ -1082,36 +1079,59 @@ exports.toggleFavorite = async (req, res) => {
     const userId = req.user.id;
     const adId = Number(req.params.adId);
 
-    // التأكد من وجود الإعلان
-    const ad = await prisma.d_Vacation.findUnique({ where: { id: adId } });
+    const ad = await prisma.d_Vacation.findUnique({
+      where: { id: adId },
+    });
+
     if (!ad) return res.status(404).json({ message: "Ad not found" });
 
-    // نتحقق هل الإعلان موجود في المفضلة
     const existing = await prisma.AdFavorite.findUnique({
-      where: { ad_id_user_id: { ad_id: adId, user_id: userId } },
+      where: {
+        ad_id_user_id: { ad_id: adId, user_id: userId },
+      },
     });
 
     let message;
+
     if (existing) {
-      // لو موجود، نحذفه
       await prisma.AdFavorite.delete({
-        where: { ad_id_user_id: { ad_id: adId, user_id: userId } },
+        where: {
+          ad_id_user_id: { ad_id: adId, user_id: userId },
+        },
       });
+
+      await prisma.d_Vacation.update({
+        where: { id: adId },
+        data: {
+          favorites_count: {
+            decrement: 1,
+          },
+        },
+      });
+
       message = "Removed from favorites";
     } else {
-      // لو مش موجود، نضيفه
+      // ✅ Add favorite
       await prisma.AdFavorite.create({
-        data: { ad_id: adId, user_id: userId },
+        data: {
+          ad_id: adId,
+          user_id: userId,
+        },
       });
+
+      await prisma.d_Vacation.update({
+        where: { id: adId },
+        data: {
+          favorites_count: {
+            increment: 1,
+          },
+        },
+      });
+
       message = "Added to favorites";
     }
 
-    // تحديث عدد المفضلات في الإعلان
-    const favoritesCount = await prisma.AdFavorite.count({
-      where: { ad_id: adId },
-    });
-
-    res.json({ message, favoritesCount });
+    res.json({ message });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Server error" });

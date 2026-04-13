@@ -1,5 +1,4 @@
 const cloudinary = require("cloudinary").v2;
-require("dotenv").config();
 
 // إعداد Cloudinary من .env
 cloudinary.config({

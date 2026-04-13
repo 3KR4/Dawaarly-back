@@ -22,7 +22,7 @@ const {
   setSuperAdmin,
 } = require("../controllers/authController");
 const { authenticate } = require("../middlewares/authMiddleware");
-const { authorize } = require("../middlewares/authorize.JS");
+const { authorize } = require("../middlewares/authorize.js");
 const { optionalAuth } = require("../middlewares/optionalAuthMiddleware");
 
 // Auth

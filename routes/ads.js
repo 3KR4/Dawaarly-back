@@ -15,7 +15,7 @@ const {
 const {
   authorizeOwnerOrSuperAdmin,
 } = require("../middlewares/authorizeOwnerOrSuperAdmin.js");
-const { authorize } = require("../middlewares/authorize.JS");
+const { authorize } = require("../middlewares/authorize.js");
 const { optionalAuth } = require("../middlewares/optionalAuthMiddleware");
 
 // Ads CRUD

@@ -1,5 +1,3 @@
-require("dotenv").config();
-
 const express = require("express");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
@@ -16,7 +14,14 @@ const subscriptionRoutes = require("./routes/subscriptions");
 const slidersRoutes = require("./routes/sliders");
 
 const app = express();
-const allowedOrigins = ["http://localhost:3000", "https://yourdomain.com"];
+
+console.log("🚀 SERVER STARTING...");
+console.log("PORT:", process.env.PORT);
+console.log("DB:", process.env.DATABASE_URL ? "OK" : "MISSING");
+console.log("JWT:", process.env.JWT_SECRET ? "OK" : "MISSING");
+
+const allowedOrigins = ["http://localhost:3000", "https://dawaarly.com"];
+app.set("trust proxy", 1);
 app.use(
   cors({
     origin: allowedOrigins,

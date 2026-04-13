@@ -8156,7 +8156,6 @@ async function seedUsers() {
 
   console.log("✅ Users seeded with realistic names, emails, and phones");
 }
-
   seedUsers();
   seedVacations()
     .catch(console.error)

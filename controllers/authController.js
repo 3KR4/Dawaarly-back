@@ -10,7 +10,6 @@ const {
   checkSuperAdminPriority,
 } = require("../middlewares/checkSuperAdminPriority");
 
-// Rate limiter للـ auth endpoints
 const authLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 دقيقة
   max: 5, // 5 طلبات لكل IP
@@ -21,7 +20,6 @@ const otpLimiter = rateLimit({
   max: 3, // 3 محاولات فقط
   message: { message: "Too many OTP attempts, try again later" },
 });
-// ----------------------- Helper Tokens -----------------------
 function createAccessToken(user) {
   return jwt.sign(
     {
@@ -39,7 +37,6 @@ function createRefreshToken(user) {
     expiresIn: "7d",
   });
 }
-// ----------------------- Serialize -----------------------
 async function serializeUser(user, requester = null) {
   const [country, governorate, city] = await Promise.all([
     user.country_id
@@ -93,7 +90,6 @@ async function serializeUser(user, requester = null) {
     }),
   };
 }
-// ----------------------- REGISTER -----------------------
 exports.register = [
   authLimiter,
   async (req, res) => {
@@ -155,7 +151,6 @@ exports.register = [
     });
   },
 ];
-// ----------------------- LOGIN -----------------------
 exports.login = [
   authLimiter,
   async (req, res) => {
@@ -203,8 +198,8 @@ exports.login = [
 
     res.cookie("refreshToken", refreshToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
+      secure: true,
+      sameSite: "none",
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
@@ -214,8 +209,6 @@ exports.login = [
     });
   },
 ];
-
-// ----------------------- REFRESH TOKEN -----------------------
 exports.refreshToken = async (req, res) => {
   try {
     const token = req.cookies.refreshToken;
@@ -255,14 +248,16 @@ exports.refreshToken = async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 };
-
-// ----------------------- LOGOUT -----------------------
 exports.logout = async (req, res) => {
   try {
     const token = req.cookies.refreshToken;
     if (token) {
       await prisma.RefreshToken.deleteMany({ where: { token } });
-      res.clearCookie("refreshToken");
+      res.clearCookie("refreshToken", {
+        httpOnly: true,
+        secure: true,
+        sameSite: "none",
+      });
     }
     res.json({ message: "Logged out successfully" });
   } catch (error) {
@@ -270,7 +265,6 @@ exports.logout = async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 };
-
 exports.verifyEmail = [
   otpLimiter,
   async (req, res) => {
@@ -310,8 +304,8 @@ exports.verifyEmail = [
 
     res.cookie("refreshToken", refreshToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
+      secure: true,
+      sameSite: "none",
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
@@ -593,7 +587,11 @@ exports.changeUserRole = async (req, res) => {
     const requester = req.user;
     const userId = Number(req.params.id);
     const { user_type } = req.body;
-
+    if (requester.id === userId) {
+      return res.status(400).json({
+        message: "You cannot change your own role",
+      });
+    }
     // جلب المستخدم الهدف
     const user = await prisma.Users.findUnique({
       where: { id: userId },

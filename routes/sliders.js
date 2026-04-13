@@ -8,7 +8,7 @@ const {
   getOneSlider,
 } = require("../controllers/slidersController");
 const { authenticate } = require("../middlewares/authMiddleware");
-const { authorize } = require("../middlewares/authorize.JS");
+const { authorize } = require("../middlewares/authorize.js");
 
 router.post("/", authenticate, authorize("ADMIN"), createSlider);
 router.patch("/:id", authenticate, authorize("ADMIN"), updateSlider);

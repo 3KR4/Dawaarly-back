@@ -17,7 +17,7 @@ async function checkSuperAdminPriority(requesterId, targetId) {
     }
 
     // الأقدم له أولوية
-    if (target.created_at > requester.created_at) {
+    if (target.created_at < requester.created_at) {
       throw new Error("Cannot modify an older super admin");
     }
   }
