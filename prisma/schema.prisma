@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "mysql"
   url      = env("DATABASE_URL")
 }
 
@@ -31,10 +31,10 @@ model Users {
   governorate_id         Int?
   language               String                 @default("en")
   theme                  String                 @default("light")
-  interests              Int[]
+  interests              Json?
   gender                 Gender?
   user_type              UserType               @default(USER)
-  permissions            Permission[]
+  permissions            Json?
   reset_password_code    String?
   reset_password_expiry  DateTime?
   favorites              AdFavorite[]
@@ -80,7 +80,7 @@ model D_Vacation {
   status                   AdStatus                    @default(PENDING)
   featured_priority        Int                         @default(0)
   admin_id                 Int?
-  title                    String                      @db.VarChar(100)
+  title                    String                      
   description              String
   display_phone            Boolean                     @default(true)
   display_whatsapp         Boolean                     @default(true)
@@ -109,7 +109,7 @@ model D_Vacation {
   am_heating               Boolean                     @default(false)
   am_elevator              Boolean                     @default(false)
   am_gym                   Boolean                     @default(false)
-  tags                     String[]
+  tags                     Json?
   views_count              Int                         @default(0)
   reach_count              Int                         @default(0)
   favorites_count          Int                         @default(0)
