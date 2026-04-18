@@ -34,14 +34,14 @@ app.use(cookieParser());
 securityMiddleware(app);
 
 // Routes
-app.use("/api/data", selectedDataRoutes);
-app.use("/api/auth", authRoutes);
-app.use("/api/ads", adsRoutes);
-app.use("/api/images", imagesRoutes);
-app.use("/api/bookings", bookingRoutes);
-app.use("/api/favorites", favoriteRoutes);
-app.use("/api/sub-requests", subscriptionRoutes);
-app.use("/api/sliders", slidersRoutes);
+app.use("/data", selectedDataRoutes);
+app.use("/auth", authRoutes);
+app.use("/ads", adsRoutes);
+app.use("/images", imagesRoutes);
+app.use("/bookings", bookingRoutes);
+app.use("/favorites", favoriteRoutes);
+app.use("/sub-requests", subscriptionRoutes);
+app.use("/sliders", slidersRoutes);
 
 app.get("/", (req, res) => {
   res.send("API Running 🚀");

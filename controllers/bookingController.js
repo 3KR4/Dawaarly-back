@@ -2,8 +2,9 @@ const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 
 const calculateTotalPrice = (ad, from_date, to_date) => {
-  const diffDays =
-    (new Date(to_date) - new Date(from_date)) / (1000 * 60 * 60 * 24);
+  const diffDays = Math.ceil(
+    (new Date(to_date) - new Date(from_date)) / (1000 * 60 * 60 * 24),
+  );
 
   if (!ad.rent_amount) return null;
 
@@ -11,11 +12,11 @@ const calculateTotalPrice = (ad, from_date, to_date) => {
     case "DAY":
       return ad.rent_amount * diffDays;
     case "WEEK":
-      return ad.rent_amount * (diffDays / 7);
+      return ad.rent_amount * Math.ceil(diffDays / 7);
     case "MONTH":
-      return ad.rent_amount * (diffDays / 30);
+      return ad.rent_amount * Math.ceil(diffDays / 30);
     case "YEAR":
-      return ad.rent_amount * (diffDays / 365);
+      return ad.rent_amount * Math.ceil(diffDays / 365);
     default:
       return null;
   }
@@ -26,7 +27,17 @@ const createBooking = async (req, res) => {
     const { ad_id, from_date, to_date } = req.body;
     const user_id = req.user.id;
 
-    if (!ad_id || !from_date || !to_date)
+    if (!ad) return res.status(404).json({ message: "Ad not found" });
+    // ❌ منع صاحب الإعلان من الحجز
+    if (ad.admin_id === user_id || ad.subuser_id === user_id) {
+      return res.status(403).json({ message: "You cannot book your own ad" });
+    }
+
+    if (ad.status !== "ACTIVE") {
+      return res.status(400).json({ message: "Ad not available for booking" });
+    }
+
+    if (!Number(ad_id) || !from_date || !to_date)
       return res.status(400).json({ message: "Missing required fields" });
 
     const from = new Date(from_date);
@@ -35,22 +46,16 @@ const createBooking = async (req, res) => {
     if (from >= to)
       return res.status(400).json({ message: "Invalid date range" });
 
-    const ad = await prisma.d_Vacation.findUnique({
+    const ad = await prisma.D_Vacation.findUnique({
       where: { id: Number(ad_id) },
     });
 
-    if (!ad) return res.status(404).json({ message: "Ad not found" });
-
-    // ❌ منع صاحب الإعلان من الحجز
-    if (ad.admin_id === user_id || ad.subuser_id === user_id) {
-      return res.status(403).json({ message: "You cannot book your own ad" });
-    }
 
     if (ad.available_from && from < ad.available_from)
-      return res.status(400).json({ message: "Before available_from" });
+      return res.status(400).json({ message: "Before available from" });
 
     if (ad.available_to && to > ad.available_to)
-      return res.status(400).json({ message: "After available_to" });
+      return res.status(400).json({ message: "After available to" });
 
     const diffDays = (to - from) / (1000 * 60 * 60 * 24);
 
@@ -144,7 +149,6 @@ const updateBookingStatus = async (req, res) => {
         where: { id: booking.id },
         data: { status },
       });
-
 
       // إذا تمت الموافقة (BOOKED)، نلغي باقي الحجوزات المتعارضة
       if (status === "BOOKED") {
@@ -306,7 +310,7 @@ const getBookingsByAd = async (req, res) => {
     if (status) where.status = status;
 
     // التحقق من وجود الإعلان
-    const ad = await prisma.d_Vacation.findUnique({
+    const ad = await prisma.D_Vacation.findUnique({
       where: { id: adId },
     });
 

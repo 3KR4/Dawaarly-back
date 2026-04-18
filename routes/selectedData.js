@@ -9,7 +9,7 @@ const {
   getCities,
   getAreas,
   getCompounds,
-} = require("../controllers/selectedDataController");
+} = require("../controllers/dataController");
 
 router.get("/categories", getCategories);
 router.get("/subcategories", getSubCategories);

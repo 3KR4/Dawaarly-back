@@ -841,19 +841,16 @@ exports.getAllUsers = async (req, res) => {
         {
           full_name: {
             contains: search,
-            mode: "insensitive",
           },
         },
         {
           email: {
             contains: search,
-            mode: "insensitive",
           },
         },
         {
           phone: {
             contains: search,
-            mode: "insensitive",
           },
         },
       ];
@@ -864,7 +861,7 @@ exports.getAllUsers = async (req, res) => {
       const permsArray = permissions.split(",");
 
       where.permissions = {
-        hasSome: permsArray,
+        array_contains: permsArray,
       };
     }
 
