@@ -163,7 +163,6 @@ model Images {
   is_cover    Boolean         @default(false)
   order       Int?
   created_at  DateTime        @default(now())
-
   @@index([entity_type, entity_id])
 }
 
@@ -221,6 +220,16 @@ model Sliders {
   order           Int?     @default(0)
 
   created_at      DateTime @default(now())
+}
+
+model Blogs {
+  id          Int      @id @default(autoincrement())
+  title       String
+  description String   @db.LongText
+  image       String?
+  json_data   Json?
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
 }
 
 model AdminLogs {

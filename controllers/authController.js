@@ -5,7 +5,6 @@ const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const { sendVerificationEmail } = require("../utils/sendEmail");
 const rateLimit = require("express-rate-limit");
-const helmet = require("helmet");
 const {
   checkSuperAdminPriority,
 } = require("../middlewares/checkSuperAdminPriority");
@@ -89,6 +88,14 @@ async function serializeUser(user, requester = null) {
       is_super_admin: user.is_super_admin || false,
     }),
   };
+}
+async function getActiveAdsCount(userId) {
+  return prisma.D_Vacation.count({
+    where: {
+      status: "ACTIVE",
+      OR: [{ admin_id: userId }, { subuser_id: userId }],
+    },
+  });
 }
 exports.register = [
   authLimiter,
@@ -929,7 +936,12 @@ exports.getUser = async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    const serialized = await serializeUser(user, requester);
+    const [serialized, activeAdsCount] = await Promise.all([
+      serializeUser(user, requester),
+      getActiveAdsCount(user.id),
+    ]);
+
+    serialized.active_ads_count = activeAdsCount;
 
     res.json(serialized);
   } catch (error) {
@@ -947,7 +959,18 @@ exports.getMe = async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    res.json(await serializeUser(user, user));
+    const [serializedUser, activeAdsCount, favoritesCount] = await Promise.all([
+      serializeUser(user, user),
+      getActiveAdsCount(user.id),
+      prisma.AdFavorite.count({
+        where: { user_id: user.id },
+      }),
+    ]);
+
+    serializedUser.active_ads_count = activeAdsCount;
+    serializedUser.favorites_count = favoritesCount;
+
+    res.json(serializedUser);
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Server error" });

@@ -31,7 +31,7 @@ exports.sendVerificationEmail = async (to, code) => {
           <!-- Header -->
           <tr>
             <td align="center" style="padding:15px; padding-bottom: 9px; background-color:#fafafa;">
-              <img src="https://res.cloudinary.com/dx9accmas/image/upload/v1775834045/ad/52/d1dtyyqpv0nxyg1dzsah.png" alt="Brand Logo" width="120" style="display:block; margin-bottom:0px;" />
+              <img src="https://www.dawaarly.com/logo.png" alt="Brand Logo" width="120" style="display:block; margin-bottom:0px;" />
               <h2 style="color:#333; margin:0;">Verify Your Email</h2>
             </td>
           </tr>

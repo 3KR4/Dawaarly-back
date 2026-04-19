@@ -6,8 +6,24 @@ const { pagination } = require("../utils/pagination");
 const { getCache, setCache, deleteCachePattern } = require("../utils/redis");
 const { validateAdDates } = require("../utils/validation");
 const adIncludeRelations = {
-  admin: true,
-  subuser: true,
+  admin: {
+    select: {
+      id: true,
+      full_name: true,
+      email: true,
+      phone: true,
+    },
+  },
+  subuser: {
+    select: {
+      id: true,
+      full_name: true,
+      email: true,
+      phone: true,
+      tiktok_link: true,
+      facebook_link: true,
+    },
+  },
   Categories: true,
   SubCategories: true,
   country: true,
@@ -25,8 +41,6 @@ const adIncludeListRelations = {
   compound: true,
   Categories: true,
   SubCategories: true,
-  admin: true,
-  subuser: true,
 };
 
 function formatListAd(ad) {
@@ -533,8 +547,40 @@ exports.getAd = async (req, res) => {
     if (!ad) return res.status(404).json({ message: "Not found" });
 
     const userId = req.user?.id || null;
+    const [adminActiveAdsCount, subuserActiveAdsCount] = await Promise.all([
+      ad.admin?.id
+        ? prisma.D_Vacation.count({
+            where: {
+              admin_id: ad.admin.id,
+              status: "ACTIVE",
+            },
+          })
+        : null,
+      ad.subuser?.id
+        ? prisma.D_Vacation.count({
+            where: {
+              subuser_id: ad.subuser.id,
+              status: "ACTIVE",
+            },
+          })
+        : null,
+    ]);
 
     const enriched = await enrichAds(ad, userId, "detail");
+
+    if (enriched[0]?.admin) {
+      enriched[0].admin = {
+        ...enriched[0].admin,
+        active_ads_count: adminActiveAdsCount || 0,
+      };
+    }
+
+    if (enriched[0]?.subuser) {
+      enriched[0].subuser = {
+        ...enriched[0].subuser,
+        active_ads_count: subuserActiveAdsCount || 0,
+      };
+    }
 
     return res.json(enriched[0]);
   } catch (err) {
