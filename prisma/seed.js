@@ -1,176 +1,6 @@
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 
-const getRandom = (arr) => arr[Math.floor(Math.random() * arr.length)];
-const getRandomInt = (min, max) =>
-  Math.floor(Math.random() * (max - min + 1)) + min;
-const currencies = ["EGP", "USD", "SAR", "AED"];
-const rentFrequencies = ["DAY", "WEEK", "MONTH"];
-function getWeightedPriority() {
-  // 80% chance to be 0, 20% chance to be 1-10
-  if (Math.random() < 0.8) return 0;
-  return Math.floor(Math.random() * 10) + 1;
-}
-const categories = {
-  1: [1, 2, 3, 4, 5], // Apartments
-  2: [6, 7, 8, 9], // Villas
-  3: [10, 11, 12, 13, 14, 15], // Commercial
-  4: [16, 17, 18, 19, 20, 21], // Lands
-};
-
-const titles = [
-  "Luxury Apartment with Sea View",
-  "Modern Studio in Prime Location",
-  "Spacious Villa with Private Garden",
-  "Cozy Chalet Near the Beach",
-  "Penthouse with Panoramic City View",
-  "Fully Furnished Apartment Ready to Move",
-  "Elegant Duplex in Quiet Area",
-  "Beachfront Villa with Stunning View",
-  "Apartment Close to All Services",
-  "Modern Apartment in New Compound",
-  "Charming Studio for Short Stay",
-  "Large Family Villa with Pool",
-  "Apartment with High-End Finishing",
-  "Sea View Chalet in Gated Community",
-  "Comfortable Apartment for Families",
-  "Luxury Penthouse with Terrace",
-  "Studio in Central Location",
-  "Villa with Spacious Backyard",
-  "Apartment Near Transportation",
-  "Fully Equipped Chalet for Vacation",
-  "Modern Duplex with Private Entrance",
-  "Cozy Apartment with Balcony",
-  "Luxury Villa in Premium Location",
-  "Apartment with Great Investment Value",
-  "Penthouse with Private Pool",
-  "Chalet with Direct Beach Access",
-  "Studio with Modern Design",
-  "Spacious Apartment in Quiet Neighborhood",
-  "Villa with Garden and Garage",
-  "Apartment in Heart of the City",
-  "Modern Chalet with Sea View",
-  "Luxury Apartment in New Development",
-  "Studio Close to Universities",
-  "Villa Perfect for Families",
-  "Apartment with Open View",
-  "Penthouse with Rooftop Access",
-  "Chalet in Tourist Area",
-  "Fully Furnished Studio",
-  "Luxury Duplex with Smart Design",
-  "Apartment with Elegant Interior",
-  "Villa with Private Swimming Pool",
-  "Modern Apartment Near Mall",
-  "Cozy Chalet for Relaxing Stay",
-  "Spacious Penthouse with View",
-  "Apartment in Secure Compound",
-  "Villa with Modern Architecture",
-  "Studio in Vibrant Area",
-  "Chalet with Garden View",
-  "Luxury Apartment Near Beach",
-  "Modern Living Space in Prime Area",
-];
-
-const descriptions = [
-  "Fully furnished and ready for immediate move-in with modern amenities.",
-  "Perfect investment opportunity with high rental demand.",
-  "Located close to all essential services and transportation.",
-  "Designed with high-end finishing and contemporary style.",
-  "Ideal for families seeking comfort and privacy.",
-  "Offers a peaceful environment with easy city access.",
-  "Includes modern kitchen and spacious living area.",
-  "Great choice for short-term or long-term stays.",
-  "Features natural lighting and open space design.",
-  "Situated in a secure and well-maintained compound.",
-  "Provides easy access to shopping centers and malls.",
-  "Equipped with all necessary appliances and furniture.",
-  "Perfect for vacation rentals with excellent location.",
-  "Offers a beautiful view and relaxing atmosphere.",
-  "Designed to meet modern lifestyle needs.",
-  "Includes balcony with open scenic views.",
-  "Located in one of the most desirable areas.",
-  "Spacious layout suitable for large families.",
-  "Close to schools, hospitals, and public transport.",
-  "High-quality materials used in finishing.",
-  "Quiet neighborhood with low traffic.",
-  "Excellent ventilation and natural sunlight.",
-  "Suitable for both living and investment purposes.",
-  "Provides privacy and comfort in a prime area.",
-  "Modern interior with stylish decoration.",
-  "Walking distance from key attractions.",
-  "Safe and secure environment for residents.",
-  "Includes dedicated parking space.",
-  "Ideal for relaxing and peaceful living.",
-  "Well-designed layout maximizing space usage.",
-  "Close to entertainment and dining options.",
-  "Great return on investment potential.",
-  "Perfect for couples and small families.",
-  "Fully serviced area with all facilities available.",
-  "Offers a blend of luxury and convenience.",
-  "Newly built with modern architecture.",
-  "Access to shared amenities like pool and gym.",
-  "Strategic location with easy highway access.",
-  "Calm and quiet surroundings for better living.",
-  "High demand area for rental opportunities.",
-  "Includes premium fixtures and fittings.",
-  "Easy access to public transportation.",
-  "Designed for comfort and elegance.",
-  "Surrounded by greenery and open spaces.",
-  "Modern finishing with attention to detail.",
-  "Suitable for holiday and seasonal stays.",
-  "Well-maintained property in excellent condition.",
-  "Provides a cozy and welcoming atmosphere.",
-  "Close to beaches and tourist destinations.",
-  "A perfect blend of luxury, location, and value.",
-];
-
-const governoratesMap = {
-  1: [1, 2, 3, 4], // Cairo
-  2: [10, 11, 12], // Giza
-  3: [20, 21, 22], // Alexandria
-  4: [30, 31], // Dakahlia
-  5: [40, 41], // Red Sea
-  6: [50, 51],
-};
-const realEstateTags = [
-  "featured", // مميز
-  "hot", // ترند
-  "new", // جديد
-  "luxury", // فاخر
-  "sea_view", // إطلالة بحر
-  "garden", // حديقة
-  "furnished", // مفروش
-  "semi_furnished", // نصف مفروش
-  "ready_to_move", // جاهز للسكن
-  "under_construction", // تحت الإنشاء
-  "investment", // استثمار
-  "family", // مناسب عائلات
-  "studio", // ستوديو
-  "penthouse", // بنتهاوس
-  "duplex", // دوبلكس
-  "corner_unit", // ناصية
-  "prime_location", // موقع مميز
-];
-function getRandomPastDate(monthsBack = 7) {
-  const now = new Date();
-  const pastDate = new Date(
-    now.getFullYear(),
-    now.getMonth() - Math.floor(Math.random() * monthsBack),
-    Math.floor(Math.random() * 28) + 1, // يوم عشوائي من 1 لـ 28
-    Math.floor(Math.random() * 24),      // ساعة عشوائية
-    Math.floor(Math.random() * 60),      // دقيقة
-    Math.floor(Math.random() * 60)       // ثانية
-  );
-  return pastDate;
-}
-
-function getRandomInterests() {
-  const count = getRandomInt(1, 6); // كل يوزر عنده 1 لـ 3 اهتمامات
-  const shuffled = [...allSubCategories].sort(() => 0.5 - Math.random());
-  return shuffled.slice(0, count);
-}
-const allSubCategories = Object.values(categories).flat();
-
 async function main() {
   await prisma.countries.createMany({
     data: [{ id: 1, name_ar: "مصر", name_en: "Egypt" }],
@@ -7875,291 +7705,113 @@ async function main() {
         name_ar: "لا فيستا كاسكادا",
         name_en: "La Vista Cascada",
       },
+      {
+        id: 111,
+        city_id: 357,
+        area_id: 1301,
+        name_ar: "لازوردي",
+        name_en: "lazord",
+      },
     ],
     skipDuplicates: true,
   });
   await prisma.categories.createMany({
     data: [
-      { id: 1, name_en: "Apartments", name_ar: "شقق" },
-      { id: 2, name_en: "Villas", name_ar: "فلل" },
-      { id: 3, name_en: "Commercial", name_ar: "تجاري" },
-      { id: 4, name_en: "Buildings & Lands", name_ar: "مباني وأراضي" },
+      { id: 1, type: "VACATION", name_en: "Villa", name_ar: "فيلا" },
+      { id: 2, type: "VACATION", name_en: "Chalet", name_ar: "شاليه" },
+      { id: 3, type: "VACATION", name_en: "Apartment", name_ar: "شقة" },
+      { id: 4, type: "VACATION", name_en: "Studio", name_ar: "استوديو" },
+      {
+        id: 5,
+        type: "VACATION",
+        name_en: "Hotel Room",
+        name_ar: "غرفة فندقية",
+      },
+      { id: 6, type: "VACATION", name_en: "Duplex", name_ar: "دوبلكس" },
+      { id: 7, type: "VACATION", name_en: "Penthouse", name_ar: "بنتهاوس" },
     ],
     skipDuplicates: true,
   });
   await prisma.subCategories.createMany({
     data: [
-      // Apartments
-      { name_en: "Apartment", name_ar: "شقة", category_id: 1 },
-      { name_en: "Studio", name_ar: "استوديو", category_id: 1 },
-      { name_en: "Duplex", name_ar: "دوبلكس", category_id: 1 },
-      { name_en: "Penthouse", name_ar: "بنتهاوس", category_id: 1 },
-      { name_en: "Serviced Apartment", name_ar: "شقة فندقية", category_id: 1 },
-
-      // Villas
-      { name_en: "Standalone Villa", name_ar: "فيلا مستقلة", category_id: 2 },
-      { name_en: "Twin House", name_ar: "توين هاوس", category_id: 2 },
-      { name_en: "Townhouse", name_ar: "تاون هاوس", category_id: 2 },
-      { name_en: "Duplex Villa", name_ar: "فيلا دوبلكس", category_id: 2 },
-
-      // Commercial
-      { name_en: "Office Space", name_ar: "مكتب إداري", category_id: 3 },
-      { name_en: "Retail Shop", name_ar: "محل تجاري", category_id: 3 },
-      { name_en: "Restaurant / Cafe", name_ar: "مطعم / كافيه", category_id: 3 },
-      { name_en: "Warehouse", name_ar: "مخزن", category_id: 3 },
+      // Villa
+      { id: 1, name_en: "Luxury Villa", name_ar: "فيلا فاخرة", category_id: 1 },
       {
-        name_en: "Clinic / Medical Center",
-        name_ar: "عيادة / مركز طبي",
+        id: 2,
+        name_en: "Standard Villa",
+        name_ar: "فيلا عادية",
+        category_id: 1,
+      },
+
+      // Chalet
+      {
+        id: 3,
+        name_en: "Beachfront Chalet",
+        name_ar: "شاليه على البحر",
+        category_id: 2,
+      },
+      {
+        id: 4,
+        name_en: "Garden Chalet",
+        name_ar: "شاليه بحديقة",
+        category_id: 2,
+      },
+
+      // Apartment
+      {
+        id: 5,
+        name_en: "Sea View Apartment",
+        name_ar: "شقة على البحر",
         category_id: 3,
       },
       {
-        name_en: "Administrative Building",
-        name_ar: "مبنى إداري",
+        id: 6,
+        name_en: "Family Apartment",
+        name_ar: "شقة عائلية",
         category_id: 3,
       },
 
-      // Buildings & Lands
-      { name_en: "Residential Building", name_ar: "مبنى سكني", category_id: 4 },
-      { name_en: "Commercial Building", name_ar: "مبنى تجاري", category_id: 4 },
+      // Studio
       {
-        name_en: "Mixed-Use Building",
-        name_ar: "مبنى متعدد الاستخدام",
+        id: 7,
+        name_en: "Budget Studio",
+        name_ar: "استوديو اقتصادي",
         category_id: 4,
       },
-      { name_en: "Residential Land", name_ar: "أرض سكنية", category_id: 4 },
-      { name_en: "Commercial Land", name_ar: "أرض تجارية", category_id: 4 },
-      { name_en: "Agricultural Land", name_ar: "أرض زراعية", category_id: 4 },
+      {
+        id: 8,
+        name_en: "Luxury Studio",
+        name_ar: "استوديو فاخر",
+        category_id: 4,
+      },
+
+      // Hotel
+      {
+        id: 9,
+        name_en: "Standard Room",
+        name_ar: "غرفة عادية",
+        category_id: 5,
+      },
+      { id: 10, name_en: "Suite", name_ar: "جناح", category_id: 5 },
+
+      // Duplex
+      {
+        id: 11,
+        name_en: "Modern Duplex",
+        name_ar: "دوبلكس حديث",
+        category_id: 6,
+      },
+
+      // Penthouse
+      {
+        id: 12,
+        name_en: "Sea View Penthouse",
+        name_ar: "بنتهاوس على البحر",
+        category_id: 7,
+      },
     ],
     skipDuplicates: true,
   });
-
-  async function seedVacations() {
-    const data = [];
-
-    for (let i = 0; i < 50; i++) {
-      const categoryId = getRandom([1, 2, 3, 4]);
-      const subCategoryList = categories[categoryId] || [1];
-      const subCategoryId = getRandom(subCategoryList);
-
-      const governorate_id = getRandomInt(1, 5);
-      const city_id = getRandomInt(1, 20);
-
-      data.push({
-        title: titles[i],
-        description: descriptions[i],
-
-        status: "ACTIVE",
-
-        admin_id: getRandom(adminIds),
-        subuser_id: getRandom(subuserIds),
-
-        categoryId,
-        subCategoryId,
-
-        country_id: 1,
-        governorate_id,
-        city_id,
-
-        rent_amount: getRandomInt(1000, 50000),
-        deposit_amount: getRandomInt(500, 20000),
-
-        rent_currency: getRandom(currencies),
-        rent_frequency: getRandom(rentFrequencies),
-        min_rent_period: getRandomInt(1, 12),
-        min_rent_period_unit: getRandom(rentFrequencies),
-
-        bedrooms: getRandomInt(1, 5),
-        bathrooms: getRandomInt(1, 5),
-        level: getRandomInt(0, 10),
-
-        adult_no_max: getRandomInt(1, 6),
-        child_no_max: getRandomInt(0, 4),
-
-        available_from: new Date(Date.now() + i * 86400000),
-        available_to: new Date(Date.now() + (i + 30) * 86400000),
-
-        am_pool: Math.random() > 0.5,
-        am_ac: Math.random() > 0.5,
-        am_gym: Math.random() > 0.5,
-        am_elevator: Math.random() > 0.5,
-        am_balcony: Math.random() > 0.5,
-        am_kitchen: true,
-
-        tags: realEstateTags.filter(() => Math.random() > 0.7),
-
-        featured_priority: getWeightedPriority(),
-        views_count: getRandomInt(0, 3000),
-        reach_count: getRandomInt(0, 800),
-        favorites_count: getRandomInt(0, 60),
-
-        created_at: getRandomPastDate(7),
-      });
-    }
-
-    await prisma.d_Vacation.createMany({
-      data,
-    });
-
-  }
-
-  const admins = await prisma.users.findMany({
-    where: {
-      user_type: "ADMIN",
-    },
-    select: { id: true },
-  });
-  const subusers = await prisma.users.findMany({
-    where: {
-      user_type: "SUBUSER",
-    },
-    select: { id: true },
-  });
-
-  const subuserIds = subusers.map((s) => s.id);
-  const adminIds = admins.map((a) => a.id);
-const firstNames = [
-  "Ahmed", "Mohamed", "Sara", "Fatma", "Omar", "Laila", "Youssef", "Mona",
-  "Khaled", "Nour", "Ali", "Dina", "Hany", "Mariam", "Tamer", "Noha"
-];
-
-const lastNames = [
-  "Hassan", "Ibrahim", "Fahmy", "Saeed", "Mahmoud", "El-Sayed", "Kamal",
-  "Farid", "Naguib", "Shawky"
-];
-
-function getRandomName() {
-  const first = firstNames[Math.floor(Math.random() * firstNames.length)];
-  const last = lastNames[Math.floor(Math.random() * lastNames.length)];
-  return `${first} ${last}`;
-}
-
-function getRandomEmail(fullName) {
-  const namePart = fullName.toLowerCase().replace(" ", ".");
-  const number = Math.floor(Math.random() * 1000);
-  return `${namePart}${number}@example.com`;
-}
-
-function getRandomPhone() {
-  // أرقام مصرية شائعة: 010, 011, 012, 015
-  const prefixes = ["010", "011", "012", "015"];
-  const prefix = prefixes[Math.floor(Math.random() * prefixes.length)];
-  const number = Math.floor(10000000 + Math.random() * 90000000);
-  return `${prefix}${number}`;
-}
-
-async function seedUsers() {
-  const users = [];
-
-  // ---------------- NORMAL USERS ----------------
-  for (let i = 0; i < 30; i++) {
-    const full_name = getRandomName();
-    const governorate_id = getRandom(Object.keys(governoratesMap).map(Number));
-    const city_id = getRandom(governoratesMap[governorate_id]);
-
-    users.push({
-      full_name,
-      email: getRandomEmail(full_name),
-      phone: getRandomPhone(),
-      password: "123456",
-      user_type: "USER",
-      country_id: 1,
-      governorate_id,
-      city_id,
-      interests: getRandomInterests(),
-    });
-  }
-
-  // ---------------- SUB USERS ----------------
-  for (let i = 0; i < 10; i++) {
-    const full_name = getRandomName();
-    const governorate_id = getRandom(Object.keys(governoratesMap).map(Number));
-    const city_id = getRandom(governoratesMap[governorate_id]);
-
-    users.push({
-      full_name,
-      email: getRandomEmail(full_name),
-      phone: getRandomPhone(),
-      password: "123456",
-      user_type: "SUBUSER",
-      country_id: 1,
-      governorate_id,
-      city_id,
-      interests: getRandomInterests(),
-    });
-  }
-
-  // ---------------- SUPER ADMIN ----------------
-  const superAdminName = "Super Admin";
-  users.push({
-    full_name: superAdminName,
-    email: "superadmin@example.com",
-    phone: "01200000000",
-    password: "123456",
-    user_type: "ADMIN",
-    is_super_admin: true,
-    country_id: 1,
-    governorate_id: 1,
-    city_id: 1,
-    interests: allSubCategories,
-  });
-
-  // ---------------- ADMINS WITH PERMISSIONS ----------------
-  const adminData = [
-    {
-      full_name: "Admin Full Control",
-      email: "admin1@example.com",
-      phone: "01200000001",
-      permissions: [
-        "CREATE_AD", "DELETE_AD", "UPDATE_AD", "BOOKINGS",
-        "SLIDERS", "VIEW_ANALYTICS", "CHANGE_ADS_STATUS", "ASSIGN_RESPONSIBILITY"
-      ],
-      governorate_id: 2,
-      city_id: 10,
-    },
-    {
-      full_name: "Admin Content",
-      email: "admin2@example.com",
-      phone: "01200000002",
-      permissions: ["CREATE_AD", "UPDATE_AD", "CHANGE_ADS_STATUS"],
-      governorate_id: 3,
-      city_id: 20,
-    },
-    {
-      full_name: "Admin Analytics",
-      email: "admin3@example.com",
-      phone: "01200000003",
-      permissions: ["VIEW_ANALYTICS", "BOOKINGS"],
-      governorate_id: 1,
-      city_id: 2,
-    },
-  ];
-
-  adminData.forEach((a) => {
-    users.push({
-      full_name: a.full_name,
-      email: a.email,
-      phone: a.phone,
-      password: "123456",
-      user_type: "ADMIN",
-      permissions: a.permissions,
-      country_id: 1,
-      governorate_id: a.governorate_id,
-      city_id: a.city_id,
-      interests: getRandomInterests(),
-    });
-  });
-
-  await prisma.users.createMany({
-    data: users,
-    skipDuplicates: true,
-  });
-
-  console.log("✅ Users seeded with realistic names, emails, and phones");
-}
-  seedUsers();
-  seedVacations()
-    .catch(console.error)
-    .finally(() => prisma.$disconnect());
 }
 main()
   .catch((e) => {

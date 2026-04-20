@@ -246,6 +246,7 @@ model Categories {
   id            Int             @id @default(autoincrement())
   name_ar       String
   name_en       String
+  type          AllTables
   ads           D_Vacation[]    @relation("CategoryAds")
   subCategories SubCategories[]
 }
@@ -326,6 +327,9 @@ enum UserType {
   ADMIN
   SUBUSER
 }
+enum AllTables {
+  VACATION
+}
 
 enum Permission {
   CREATE_AD
@@ -362,6 +366,7 @@ enum ImageEntityType {
   SLIDER
   USER
   CATEGORY
+  BLOG
   AREA
   COMPOUND
 }

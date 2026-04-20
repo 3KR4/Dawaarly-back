@@ -33,7 +33,6 @@ const adIncludeRelations = {
   compound: true,
   Booking: true,
 };
-
 const adIncludeListRelations = {
   city: true,
   governorate: true,
@@ -42,7 +41,6 @@ const adIncludeListRelations = {
   Categories: true,
   SubCategories: true,
 };
-
 function formatListAd(ad) {
   const firstImage =
     ad.images?.find((i) => i.is_cover) || ad.images?.[0] || null;
@@ -97,7 +95,6 @@ function formatDetailAd(ad) {
     details,
   };
 }
-
 async function enrichAds(ads, userId = null, mode = "list") {
   if (!ads) return null;
   if (!Array.isArray(ads)) ads = [ads];
@@ -142,7 +139,6 @@ async function enrichAds(ads, userId = null, mode = "list") {
     };
   });
 }
-
 exports.createAd = async (req, res) => {
   try {
     const data = req.body;
@@ -254,7 +250,6 @@ const buildUpdateData = (body) => {
 
   return data;
 };
-
 exports.updateAd = async (req, res) => {
   try {
     const adId = Number(req.params.adId);
@@ -482,7 +477,6 @@ exports.assignAdmin = async (req, res) => {
     res.status(500).json({ message: "Server Error" });
   }
 };
-
 exports.getAllAds = async (req, res) => {
   try {
     const userId = req.user?.id || null;
@@ -534,7 +528,6 @@ exports.getAllAds = async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 };
-
 exports.getAd = async (req, res) => {
   try {
     const adId = Number(req.params.adId);
@@ -587,10 +580,9 @@ exports.getAd = async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 };
-
 exports.getUserAds = async (req, res) => {
   try {
-    const { userId } = req.params;
+     const userId = Number(req.params.userId);
     const { page, limit, skip } = pagination(req.query);
 
     const cacheKey = `userAds:${userId}:${page}:${limit}:${JSON.stringify(req.query)}`;
@@ -640,7 +632,6 @@ exports.getUserAds = async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 };
-
 exports.getSectionsAds = async (req, res) => {
   try {
     const { type, value } = req.query;
@@ -688,7 +679,6 @@ exports.getSectionsAds = async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 };
-
 exports.getFavorites = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -721,7 +711,6 @@ exports.getFavorites = async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 };
-
 exports.toggleFavorite = async (req, res) => {
   try {
     const userId = req.user.id;
