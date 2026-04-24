@@ -159,7 +159,9 @@ exports.createAd = async (req, res) => {
       "level",
     ];
 
-    const missing = requiredFields.filter((f) => !data[f]);
+    const missing = requiredFields.filter(
+      (f) => data[f] === undefined || data[f] === null,
+    );
 
     if (missing.length) {
       return res.status(400).json({ message: "Missing fields", missing });
@@ -582,7 +584,7 @@ exports.getAd = async (req, res) => {
 };
 exports.getUserAds = async (req, res) => {
   try {
-     const userId = Number(req.params.userId);
+    const userId = Number(req.params.userId);
     const { page, limit, skip } = pagination(req.query);
 
     const cacheKey = `userAds:${userId}:${page}:${limit}:${JSON.stringify(req.query)}`;

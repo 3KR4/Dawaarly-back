@@ -208,16 +208,14 @@ model Booking {
 model Sliders {
   id              Int      @id @default(autoincrement())
 
-  name_en         String
-  name_ar         String
+  title           Json
 
-  description_en  String?
-  description_ar  String?
+  description     Json?
 
   link            String?
   is_active       Boolean  @default(true)
 
-  order           Int?     @default(0)
+  order           Int      @default(0)
 
   created_at      DateTime @default(now())
 }
