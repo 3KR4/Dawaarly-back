@@ -255,7 +255,7 @@ model SubCategories {
   name_ar     String
   name_en     String
   ads         D_Vacation[] @relation("SubCategoryAds")
-  category    Categories   @relation(fields: [category_id], references: [id])
+  category    Categories   @relation(fields: [category_id], references: [id], onDelete: Cascade)
 }
 
 model Countries {
@@ -274,7 +274,7 @@ model Governorates {
   name_en    String
   cities     Cities[]
   ads        D_Vacation[] @relation("GovernorateAds")
-  country    Countries    @relation(fields: [country_id], references: [id])
+  country    Countries    @relation(fields: [country_id], references: [id], onDelete: Cascade)
   users      Users[]
 
   @@index([country_id])
@@ -286,7 +286,7 @@ model Cities {
   name_ar        String
   name_en        String
   areas          Areas[]
-  governorate    Governorates @relation(fields: [governorate_id], references: [id])
+  governorate    Governorates @relation(fields: [governorate_id], references: [id], onDelete: Cascade)
   compounds      Compounds[]
   ads            D_Vacation[] @relation("CityAds")
   users          Users[]
@@ -299,7 +299,7 @@ model Areas {
   city_id   Int
   name_ar   String
   name_en   String
-  city      Cities       @relation(fields: [city_id], references: [id])
+  city      Cities       @relation(fields: [city_id], references: [id], onDelete: Cascade)
   compounds Compounds[]
   ads       D_Vacation[] @relation("AreaAds")
 
@@ -312,8 +312,8 @@ model Compounds {
   name_ar String
   name_en String
   city_id Int
-  area    Areas?       @relation(fields: [area_id], references: [id])
-  city    Cities       @relation(fields: [city_id], references: [id])
+  area    Areas?       @relation(fields: [area_id], references: [id], onDelete: Cascade)
+  city    Cities       @relation(fields: [city_id], references: [id], onDelete: Cascade)
   ads     D_Vacation[] @relation("CompoundAds")
 
   @@index([city_id])

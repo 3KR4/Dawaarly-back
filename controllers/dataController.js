@@ -10,6 +10,223 @@ const parseId = (value) => {
   const parsed = Number(value);
   return isNaN(parsed) ? undefined : parsed;
 };
+const MODELS = {
+  categories: prisma.Categories,
+  subcategories: prisma.SubCategories,
+  countries: prisma.Countries,
+  governorates: prisma.Governorates,
+  cities: prisma.Cities,
+  areas: prisma.Areas,
+  compounds: prisma.Compounds,
+};
+
+// =========================
+// CRUD OPERATIONS
+// =========================
+
+exports.createItem = async (req, res) => {
+  try {
+    const { model } = req.params;
+
+    const prismaModel = MODELS[model.toLowerCase()];
+    if (!prismaModel) {
+      return res.status(400).json({ message: "Invalid model" });
+    }
+
+    const data = req.body;
+
+    // 1) create item
+    const item = await prismaModel.create({
+      data,
+    });
+
+    // 2) detect parent
+    const parentKey = Object.keys(data).find((k) => k.endsWith("_id"));
+
+    let parent = null;
+
+    if (parentKey && data[parentKey]) {
+      // 🔥 FIX: proper mapping (solve missing "s" issue)
+      const RELATION_MODEL = {
+        governorate_id: "governorates",
+        city_id: "cities",
+        area_id: "areas",
+        country_id: "countries",
+        compound_id: "compounds",
+        category_id: "categories",
+        subcategory_id: "subcategories",
+      };
+
+      const parentModel = MODELS[RELATION_MODEL[parentKey]];
+
+      if (parentModel) {
+        const parentId = Number(data[parentKey]);
+
+        const parentData = await parentModel.findUnique({
+          where: { id: parentId },
+          include: {
+            _count: true,
+          },
+        });
+
+        parent = {
+          ...parentData,
+          childsCount: Object.values(parentData._count || {}).reduce(
+            (a, b) => a + b,
+            0,
+          ),
+        };
+      }
+    }
+    const SKIP_COUNT = ["subcategories", "compounds"];
+
+    const itemResponse = SKIP_COUNT.includes(model.toLowerCase())
+      ? item
+      : {
+          ...item,
+          childsCount: 0,
+        };
+    res.json({
+      item: itemResponse,
+      parent,
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+exports.updateItem = async (req, res) => {
+  try {
+    const { model, id } = req.params;
+
+    const prismaModel = MODELS[model.toLowerCase()];
+    if (!prismaModel) {
+      return res.status(400).json({ message: "Invalid model" });
+    }
+
+    const data = req.body;
+
+    const item = await prismaModel.update({
+      where: { id: Number(id) },
+      data,
+    });
+
+    // =========================
+    // get childsCount like list APIs
+    // =========================
+    const CHILD_RELATIONS = {
+      categories: "subCategories",
+      countries: "governorates",
+      governorates: "cities",
+      cities: "areas",
+      areas: "compounds",
+    };
+
+    const relationKey = CHILD_RELATIONS[model.toLowerCase()];
+
+    let finalItem = item;
+
+    if (relationKey) {
+      const withCount = await prismaModel.findUnique({
+        where: { id: Number(id) },
+        include: {
+          _count: {
+            select: {
+              [relationKey]: true,
+            },
+          },
+        },
+      });
+
+      finalItem = {
+        ...item,
+        childsCount: withCount?._count?.[relationKey] || 0,
+      };
+    }
+
+    res.json({
+      item: finalItem,
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+exports.deleteItem = async (req, res) => {
+  try {
+    const { model, id } = req.params;
+
+    const prismaModel = MODELS[model.toLowerCase()];
+    if (!prismaModel) {
+      return res.status(400).json({ message: "Invalid model" });
+    }
+
+    // 1) get item first
+    const item = await prismaModel.findUnique({
+      where: { id: Number(id) },
+    });
+
+    if (!item) {
+      return res.status(404).json({ message: "Item not found" });
+    }
+
+    // =========================
+    // FIX: proper mapping
+    // =========================
+    const RELATION_MODEL = {
+      governorate_id: "governorates",
+      city_id: "cities",
+      area_id: "areas",
+      country_id: "countries",
+      compound_id: "compounds",
+      category_id: "categories",
+      subcategory_id: "subcategories",
+    };
+
+    const parentKey = Object.keys(item).find((k) => k.endsWith("_id"));
+
+    let parent = null;
+
+    if (parentKey && item[parentKey]) {
+      const parentModel = MODELS[RELATION_MODEL[parentKey]];
+
+      const parentId = Number(item[parentKey]);
+
+      // delete item
+      await prismaModel.delete({
+        where: { id: Number(id) },
+      });
+
+      // 🔥 important safety check
+      if (parentModel) {
+        const parentData = await parentModel.findUnique({
+          where: { id: parentId },
+          include: {
+            _count: true,
+          },
+        });
+
+        parent = {
+          ...parentData,
+          childsCount: Object.values(parentData._count || {}).reduce(
+            (a, b) => a + b,
+            0,
+          ),
+        };
+      }
+    } else {
+      // delete without parent
+      await prismaModel.delete({
+        where: { id: Number(id) },
+      });
+    }
+
+    res.json({
+      message: "Deleted successfully",
+      parent,
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
 
 // =========================
 // Categories
@@ -27,7 +244,7 @@ exports.getCategories = async (req, res) => {
 
     const result = categories.map((cat) => ({
       ...cat,
-      subCategories_count: cat._count.subCategories,
+      childsCount: cat._count.subCategories,
       _count: undefined,
     }));
 
@@ -68,7 +285,7 @@ exports.getCountries = async (req, res) => {
 
     const result = countries.map((country) => ({
       ...country,
-      governorates_count: country._count.governorates,
+      childsCount: country._count.governorates,
       _count: undefined,
     }));
 
@@ -97,7 +314,7 @@ exports.getGovernorates = async (req, res) => {
 
     const result = governorates.map((gov) => ({
       ...gov,
-      cities_count: gov._count.cities,
+      childsCount: gov._count.cities,
       _count: undefined,
     }));
 
@@ -116,9 +333,7 @@ exports.getCities = async (req, res) => {
 
     const cities = await prisma.Cities.findMany({
       where:
-        governorateId !== undefined
-          ? { governorate_id: governorateId }
-          : {},
+        governorateId !== undefined ? { governorate_id: governorateId } : {},
       orderBy: { id: "asc" },
       include: {
         _count: {
@@ -132,8 +347,8 @@ exports.getCities = async (req, res) => {
 
     const result = cities.map((city) => ({
       ...city,
-      areas_count: city._count.areas,
-      compounds_count: city._count.compounds,
+      areasCount: city._count.areas,
+      compoundsCount: city._count.compounds,
       _count: undefined,
     }));
 
@@ -169,7 +384,7 @@ exports.getAreas = async (req, res) => {
 
     const result = areas.map((area) => ({
       ...area,
-      compounds_count: area._count.compounds,
+      childsCount: area._count.compounds,
       _count: undefined,
     }));
 
