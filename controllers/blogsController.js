@@ -2,77 +2,179 @@ const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 const cloudinary = require("../utils/cloudinary");
 const { pagination } = require("../utils/pagination");
+const slugify = require("slugify");
 
-function formatBlogWithImages(blog, images = []) {
-  const coverImage = images.find((image) => image.is_cover) || images[0] || null;
+// =============================
+// Helper: Resolve Images inside blocks
+// =============================
+const resolveContentImages = (content, imageMap) => {
+  if (!content) return [];
 
-  return {
-    ...blog,
-    image: coverImage,
-    images,
-  };
-}
+  return content.map((block) => {
+    if (block.type === "image") {
+      return {
+        ...block,
+        image: imageMap[block.image_id] || null,
+      };
+    }
+    return block;
+  });
+};
 
+// =============================
+// CREATE BLOG
+// =============================
 exports.createBlog = async (req, res) => {
   try {
-    const { title, description, json_data } = req.body;
+    const {
+      title_en,
+      title_ar,
+      description_en,
+      description_ar,
+      content_en,
+      content_ar,
+      meta_title_en,
+      meta_title_ar,
+      meta_desc_en,
+      meta_desc_ar,
+      keywords_en,
+      keywords_ar,
+    } = req.body;
 
-    if (!title || !description) {
+    if (!title_en || !description_en || !content_en) {
       return res.status(400).json({
-        message: "title and description are required",
+        message: "English content is required",
       });
     }
 
+    let slug = slugify(title_en, { lower: true, strict: true });
+
+    const exists = await prisma.Blogs.findFirst({ where: { slug } });
+
+    if (exists) {
+      slug = `${slug}-${Date.now()}`;
+    }
+
+    const reading_time = Math.ceil(
+      JSON.stringify(content_en).split(" ").length / 200,
+    );
+
     const blog = await prisma.Blogs.create({
       data: {
-        title,
-        description,
-        json_data,
+        slug,
+
+        title_en,
+        title_ar,
+
+        description_en,
+        description_ar,
+
+        content_en,
+        content_ar,
+
+        meta_title_en,
+        meta_title_ar,
+
+        meta_desc_en,
+        meta_desc_ar,
+
+        keywords_en,
+        keywords_ar,
+
+        reading_time,
+
+        author_id: req.user?.id || null,
+        is_published: false,
       },
     });
 
     res.status(201).json(blog);
   } catch (error) {
-    res.status(500).json({
-      message: "Server error",
-      error: error.message,
-    });
+    res.status(500).json({ message: error.message });
   }
 };
 
+// =============================
+// UPDATE BLOG
+// =============================
 exports.updateBlog = async (req, res) => {
   try {
     const blogId = Number(req.params.id);
-    const { title, description, json_data } = req.body;
+
+    const {
+      title_en,
+      title_ar,
+      description_en,
+      description_ar,
+      content_en,
+      content_ar,
+      meta_title_en,
+      meta_title_ar,
+      meta_desc_en,
+      meta_desc_ar,
+      keywords_en,
+      keywords_ar,
+      is_published,
+    } = req.body;
 
     const existing = await prisma.Blogs.findUnique({
       where: { id: blogId },
     });
 
     if (!existing) {
-      return res.status(404).json({
-        message: "Blog not found",
-      });
+      return res.status(404).json({ message: "Blog not found" });
     }
+
+    let slug;
+    if (title_en) {
+      slug = slugify(title_en, { lower: true, strict: true });
+    }
+
+    const reading_time = content_en
+      ? Math.ceil(JSON.stringify(content_en).split(" ").length / 200)
+      : undefined;
 
     const updated = await prisma.Blogs.update({
       where: { id: blogId },
       data: {
-        ...(title !== undefined && { title }),
-        ...(description !== undefined && { description }),
-        ...(json_data !== undefined && { json_data }),
+        ...(title_en && { title_en }),
+        ...(title_ar && { title_ar }),
+
+        ...(slug && { slug }),
+
+        ...(description_en && { description_en }),
+        ...(description_ar && { description_ar }),
+
+        ...(content_en && { content_en }),
+        ...(content_ar && { content_ar }),
+
+        ...(meta_title_en && { meta_title_en }),
+        ...(meta_title_ar && { meta_title_ar }),
+
+        ...(meta_desc_en && { meta_desc_en }),
+        ...(meta_desc_ar && { meta_desc_ar }),
+
+        ...(keywords_en && { keywords_en }),
+        ...(keywords_ar && { keywords_ar }),
+
+        ...(reading_time && { reading_time }),
+
+        ...(is_published !== undefined && {
+          is_published,
+          published_at: is_published ? new Date() : null,
+        }),
       },
     });
 
     res.json(updated);
   } catch (error) {
-    res.status(500).json({
-      message: "Server error",
-      error: error.message,
-    });
+    res.status(500).json({ message: error.message });
   }
 };
 
+// =============================
+// DELETE BLOG
+// =============================
 exports.deleteBlog = async (req, res) => {
   try {
     const blogId = Number(req.params.id);
@@ -82,9 +184,7 @@ exports.deleteBlog = async (req, res) => {
     });
 
     if (!existing) {
-      return res.status(404).json({
-        message: "Blog not found",
-      });
+      return res.status(404).json({ message: "Blog not found" });
     }
 
     const images = await prisma.Images.findMany({
@@ -95,7 +195,7 @@ exports.deleteBlog = async (req, res) => {
     });
 
     await Promise.allSettled(
-      images.map((image) => cloudinary.uploader.destroy(image.public_id)),
+      images.map((img) => cloudinary.uploader.destroy(img.public_id)),
     );
 
     await prisma.Images.deleteMany({
@@ -109,53 +209,84 @@ exports.deleteBlog = async (req, res) => {
       where: { id: blogId },
     });
 
-    res.json({
-      message: "Blog deleted",
-    });
+    res.json({ message: "Blog deleted" });
   } catch (error) {
-    res.status(500).json({
-      message: "Server error",
-      error: error.message,
-    });
+    res.status(500).json({ message: error.message });
   }
 };
 
+// =============================
+// GET ALL BLOGS
+// =============================
 exports.getBlogs = async (req, res) => {
   try {
     const { page, limit, skip } = pagination(req.query);
 
+    const isAdmin = req.user?.user_type === "ADMIN";
+
+    const where = isAdmin
+      ? {}
+      : {
+          is_published: true,
+        };
+
     const [blogs, total] = await Promise.all([
       prisma.Blogs.findMany({
+        where,
         skip,
         take: limit,
         orderBy: {
           created_at: "desc",
         },
+        select: {
+          id: true,
+          slug: true,
+
+          title_en: true,
+          title_ar: true,
+
+          description_en: true,
+          description_ar: true,
+
+          created_at: true,
+          is_published: true,
+
+          author: {
+            select: {
+              id: true,
+              full_name: true,
+            },
+          },
+        },
       }),
-      prisma.Blogs.count(),
+      prisma.Blogs.count({ where }),
     ]);
 
-    const blogIds = blogs.map((blog) => blog.id);
+    const blogIds = blogs.map((b) => b.id);
 
-    const images = blogIds.length
-      ? await prisma.Images.findMany({
-          where: {
-            entity_type: "BLOG",
-            entity_id: { in: blogIds },
-          },
-          orderBy: [{ entity_id: "asc" }, { order: "asc" }],
-        })
-      : [];
+    const images = await prisma.Images.findMany({
+      where: {
+        entity_type: "BLOG",
+        entity_id: { in: blogIds },
+      },
+    });
 
-    const imagesMap = images.reduce((acc, image) => {
-      if (!acc[image.entity_id]) acc[image.entity_id] = [];
-      acc[image.entity_id].push(image);
-      return acc;
-    }, {});
+    const imageMap = {};
+    const coverMap = {};
 
-    const data = blogs.map((blog) =>
-      formatBlogWithImages(blog, imagesMap[blog.id] || []),
-    );
+    images.forEach((img) => {
+      if (!imageMap[img.entity_id]) imageMap[img.entity_id] = [];
+      imageMap[img.entity_id].push(img);
+
+      if (img.is_cover) {
+        coverMap[img.entity_id] = img;
+      }
+    });
+
+    const data = blogs.map((blog) => ({
+      ...blog,
+      image: coverMap[blog.id] || null,
+    }));
 
     res.json({
       data,
@@ -167,25 +298,37 @@ exports.getBlogs = async (req, res) => {
       },
     });
   } catch (error) {
-    res.status(500).json({
-      message: "Server error",
-      error: error.message,
-    });
+    res.status(500).json({ message: error.message });
   }
 };
 
+// =============================
+// GET ONE BLOG
+// =============================
 exports.getOneBlog = async (req, res) => {
   try {
-    const blogId = Number(req.params.id);
+    const { slug } = req.params;
+
+    const isAdmin = req.user?.user_type === "ADMIN";
 
     const blog = await prisma.Blogs.findUnique({
-      where: { id: blogId },
+      where: { slug },
+      include: {
+        author: {
+          select: {
+            id: true,
+            full_name: true,
+          },
+        },
+      },
     });
 
     if (!blog) {
-      return res.status(404).json({
-        message: "Blog not found",
-      });
+      return res.status(404).json({ message: "Blog not found" });
+    }
+
+    if (!isAdmin && !blog.is_published) {
+      return res.status(404).json({ message: "Blog not found" });
     }
 
     const images = await prisma.Images.findMany({
@@ -193,16 +336,27 @@ exports.getOneBlog = async (req, res) => {
         entity_type: "BLOG",
         entity_id: blog.id,
       },
-      orderBy: {
-        order: "asc",
-      },
+      orderBy: { order: "asc" },
     });
 
-    res.json(formatBlogWithImages(blog, images));
-  } catch (error) {
-    res.status(500).json({
-      message: "Server error",
-      error: error.message,
+    const imageMap = {};
+    let cover = null;
+
+    images.forEach((img) => {
+      imageMap[img.id] = img;
+      if (img.is_cover) cover = img;
     });
+
+    const content_en = resolveContentImages(blog.content_en, imageMap);
+    const content_ar = resolveContentImages(blog.content_ar, imageMap);
+
+    res.json({
+      ...blog,
+      cover,
+      content_en,
+      content_ar,
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
   }
 };

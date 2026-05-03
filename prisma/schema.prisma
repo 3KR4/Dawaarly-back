@@ -40,6 +40,7 @@ model Users {
   favorites              AdFavorite[]
   AdminLogs              AdminLogs[]
   bookings               Booking[]              @relation("UserBookings")
+  blogs                  Blogs[]
   ads_created_as_admin   D_Vacation[]           @relation("AdminAds")
   ads_created_as_subuser D_Vacation[]           @relation("SubuserAds")
   refreshTokens          RefreshToken[]
@@ -80,7 +81,7 @@ model D_Vacation {
   status                   AdStatus                    @default(PENDING)
   featured_priority        Int                         @default(0)
   admin_id                 Int?
-  title                    String                      
+  title                    String
   description              String
   display_phone            Boolean                     @default(true)
   display_whatsapp         Boolean                     @default(true)
@@ -163,6 +164,7 @@ model Images {
   is_cover    Boolean         @default(false)
   order       Int?
   created_at  DateTime        @default(now())
+
   @@index([entity_type, entity_id])
 }
 
@@ -206,30 +208,58 @@ model Booking {
 }
 
 model Sliders {
-  id              Int      @id @default(autoincrement())
+  id Int @id @default(autoincrement())
 
-  title           Json
+  title Json
 
-  description     Json?
+  description Json?
 
-  link            String?
-  is_active       Boolean  @default(true)
+  link      String?
+  is_active Boolean @default(true)
 
-  order           Int      @default(0)
+  order Int @default(0)
 
-  created_at      DateTime @default(now())
+  created_at DateTime @default(now())
 }
 
 model Blogs {
-  id          Int      @id @default(autoincrement())
-  title       String
-  description String   @db.LongText
-  image       String?
-  json_data   Json?
-  created_at  DateTime @default(now())
-  updated_at  DateTime @updatedAt
-}
+  id Int @id @default(autoincrement())
 
+  slug String @unique
+
+  title_en String?
+  title_ar String?
+
+  description_en String? @db.LongText
+  description_ar String? @db.LongText
+
+  content_en Json?
+  content_ar Json?
+
+  meta_title_en String?
+  meta_title_ar String?
+
+  meta_desc_en String?
+  meta_desc_ar String?
+
+  keywords_en String?
+  keywords_ar String?
+
+  author_id Int?
+
+  is_published Boolean @default(false)
+  published_at DateTime?
+
+  reading_time Int?
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  author Users? @relation(fields: [author_id], references: [id])
+
+  @@index([slug])
+  @@index([is_published, created_at])
+}
 model AdminLogs {
   id         Int      @id @default(autoincrement())
   admin_id   Int
@@ -325,6 +355,7 @@ enum UserType {
   ADMIN
   SUBUSER
 }
+
 enum AllTables {
   VACATION
 }

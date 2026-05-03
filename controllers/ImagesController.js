@@ -45,32 +45,39 @@ exports.uploadImages = async (req, res) => {
     const entityId = Number(req.params.entity_id);
 
     if (!entityType || !entityId) {
-      return res
-        .status(400)
-        .json({ message: "entity_type and entity_id are required" });
+      return res.status(400).json({
+        message: "entity_type and entity_id are required",
+      });
     }
 
     if (!req.files || req.files.length === 0) {
-      return res.status(400).json({ message: "No files uploaded" });
+      return res.status(400).json({
+        message: "No files uploaded",
+      });
     }
 
-    // 👇 مهم: نضمن إن أول صورة فقط هي cover
-    const uploadPromises = req.files.map((file, index) => {
-      return uploadSingleImage(
-        file,
-        entityType,
-        entityId,
-        index,
-        index === 0
-      );
-    });
+    // 👇 هنا الفرق
+    const uploadedImages = await Promise.all(
+      req.files.map((file, index) =>
+        uploadSingleImage(file, entityType, entityId, index, index === 0),
+      ),
+    );
 
-    await Promise.all(uploadPromises);
+    // 👇 رجع داتا نظيفة للفرونت
+    const response = uploadedImages.map((img) => ({
+      id: img.id,
+      url: img.secure_url,
+      is_cover: img.is_cover,
+      order: img.order,
+    }));
 
-    res.status(201).json({ message: "Images uploaded successfully" });
+    res.status(201).json(response);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: "Server Error", error: err.message });
+    res.status(500).json({
+      message: "Server Error",
+      error: err.message,
+    });
   }
 };
 
