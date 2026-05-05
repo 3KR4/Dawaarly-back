@@ -231,14 +231,32 @@ exports.deleteBlog = async (req, res) => {
 exports.getBlogs = async (req, res) => {
   try {
     const { page, limit, skip } = pagination(req.query);
+    const { search, status } = req.query;
 
     const isAdmin = req.user?.user_type === "ADMIN";
 
-    const where = isAdmin
-      ? {}
-      : {
-          is_published: true,
-        };
+    let where = {};
+
+    // ✅ user يشوف published بس
+    if (!isAdmin) {
+      where.is_published = true;
+    }
+
+    // ✅ admin يفلتر بالـ status (اختياري)
+    if (isAdmin && status) {
+      if (status === "published") where.is_published = true;
+      if (status === "unpublished") where.is_published = false;
+    }
+
+    // ✅ search (اختياري)
+    if (search) {
+      where.OR = [
+        { title_en: { contains: search, mode: "insensitive" } },
+        { title_ar: { contains: search, mode: "insensitive" } },
+        { description_en: { contains: search, mode: "insensitive" } },
+        { description_ar: { contains: search, mode: "insensitive" } },
+      ];
+    }
 
     const [blogs, total] = await Promise.all([
       prisma.Blogs.findMany({
@@ -267,8 +285,12 @@ exports.getBlogs = async (req, res) => {
               full_name: true,
             },
           },
+
+          // ⚠️ خلي بالك من دي
+          // لو مش موجودين في schema امسحهم
           views_count: true,
           reach_count: true,
+
           reading_time: true,
         },
       }),
@@ -284,13 +306,9 @@ exports.getBlogs = async (req, res) => {
       },
     });
 
-    const imageMap = {};
     const coverMap = {};
 
     images.forEach((img) => {
-      if (!imageMap[img.entity_id]) imageMap[img.entity_id] = [];
-      imageMap[img.entity_id].push(img);
-
       if (img.is_cover) {
         coverMap[img.entity_id] = img;
       }
@@ -314,7 +332,6 @@ exports.getBlogs = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
-
 // =============================
 // GET ONE BLOG
 // =============================
