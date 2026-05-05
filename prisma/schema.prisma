@@ -179,6 +179,18 @@ model AdReach {
   @@unique([ad_id, user_id])
   @@unique([ad_id, ip_address])
 }
+model BlogReach {
+  id         Int      @id @default(autoincrement())
+  blog_id    Int
+  user_id    Int?
+  ip_address String?
+  created_at DateTime @default(now())
+
+  blog Blogs @relation(fields: [blog_id], references: [id], onDelete: Cascade)
+
+  @@unique([blog_id, user_id])
+  @@unique([blog_id, ip_address])
+}
 
 model AdFavorite {
   id      Int        @id @default(autoincrement())
@@ -242,8 +254,7 @@ model Blogs {
   meta_desc_en String?
   meta_desc_ar String?
 
-  keywords_en String?
-  keywords_ar String?
+  tags Json?
 
   author_id Int?
 
@@ -252,13 +263,17 @@ model Blogs {
 
   reading_time Int?
 
+  views_count Int @default(0)     
+  reach_count Int @default(0)   
+
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
   author Users? @relation(fields: [author_id], references: [id])
-
+  blogReaches BlogReach[]
   @@index([slug])
   @@index([is_published, created_at])
+  
 }
 model AdminLogs {
   id         Int      @id @default(autoincrement())

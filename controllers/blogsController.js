@@ -21,6 +21,37 @@ const resolveContentImages = (content, imageMap) => {
   });
 };
 
+const trackBlogView = async ({ blogId, userId, ip }) => {
+  // ===== 1. views (always increment)
+  await prisma.Blogs.update({
+    where: { id: blogId },
+    data: {
+      views_count: { increment: 1 },
+    },
+  });
+
+  // ===== 2. reach (unique per user/ip)
+  try {
+    await prisma.BlogReach.create({
+      data: {
+        blog_id: blogId,
+        user_id: userId || null,
+        ip_address: userId ? null : ip,
+      },
+    });
+
+    // لو أول مرة → زوّد reach
+    await prisma.Blogs.update({
+      where: { id: blogId },
+      data: {
+        reach_count: { increment: 1 },
+      },
+    });
+  } catch (err) {
+    // duplicate → خلاص الشخص ده counted قبل كده
+  }
+};
+
 // =============================
 // CREATE BLOG
 // =============================
@@ -37,11 +68,10 @@ exports.createBlog = async (req, res) => {
       meta_title_ar,
       meta_desc_en,
       meta_desc_ar,
-      keywords_en,
-      keywords_ar,
+      tags,
     } = req.body;
 
-    if (!title_en || !description_en || !content_en) {
+    if (!title_en || !description_en) {
       return res.status(400).json({
         message: "English content is required",
       });
@@ -55,22 +85,14 @@ exports.createBlog = async (req, res) => {
       slug = `${slug}-${Date.now()}`;
     }
 
-    const reading_time = Math.ceil(
-      JSON.stringify(content_en).split(" ").length / 200,
-    );
-
     const blog = await prisma.Blogs.create({
       data: {
         slug,
-
         title_en,
         title_ar,
 
         description_en,
         description_ar,
-
-        content_en,
-        content_ar,
 
         meta_title_en,
         meta_title_ar,
@@ -78,10 +100,7 @@ exports.createBlog = async (req, res) => {
         meta_desc_en,
         meta_desc_ar,
 
-        keywords_en,
-        keywords_ar,
-
-        reading_time,
+        tags,
 
         author_id: req.user?.id || null,
         is_published: false,
@@ -112,8 +131,7 @@ exports.updateBlog = async (req, res) => {
       meta_title_ar,
       meta_desc_en,
       meta_desc_ar,
-      keywords_en,
-      keywords_ar,
+      tags,
       is_published,
     } = req.body;
 
@@ -125,11 +143,6 @@ exports.updateBlog = async (req, res) => {
       return res.status(404).json({ message: "Blog not found" });
     }
 
-    let slug;
-    if (title_en) {
-      slug = slugify(title_en, { lower: true, strict: true });
-    }
-
     const reading_time = content_en
       ? Math.ceil(JSON.stringify(content_en).split(" ").length / 200)
       : undefined;
@@ -139,8 +152,6 @@ exports.updateBlog = async (req, res) => {
       data: {
         ...(title_en && { title_en }),
         ...(title_ar && { title_ar }),
-
-        ...(slug && { slug }),
 
         ...(description_en && { description_en }),
         ...(description_ar && { description_ar }),
@@ -154,8 +165,7 @@ exports.updateBlog = async (req, res) => {
         ...(meta_desc_en && { meta_desc_en }),
         ...(meta_desc_ar && { meta_desc_ar }),
 
-        ...(keywords_en && { keywords_en }),
-        ...(keywords_ar && { keywords_ar }),
+        ...(tags && { tags }),
 
         ...(reading_time && { reading_time }),
 
@@ -257,6 +267,9 @@ exports.getBlogs = async (req, res) => {
               full_name: true,
             },
           },
+          views_count: true,
+          reach_count: true,
+          reading_time: true,
         },
       }),
       prisma.Blogs.count({ where }),
@@ -331,6 +344,14 @@ exports.getOneBlog = async (req, res) => {
       return res.status(404).json({ message: "Blog not found" });
     }
 
+    // ✅ track views + reach
+    await trackBlogView({
+      blogId: blog.id,
+      userId: req.user?.id,
+      ip: req.ip,
+    });
+
+    // ===== images logic =====
     const images = await prisma.Images.findMany({
       where: {
         entity_type: "BLOG",
