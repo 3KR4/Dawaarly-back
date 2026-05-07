@@ -8,10 +8,7 @@ const uploadSingleImage = (file, entityType, entityId, order, isCover) => {
     const uploadStream = cloudinary.uploader.upload_stream(
       {
         folder: `${entityType.toLowerCase()}/${entityId}`,
-        transformation: [
-          { fetch_format: "auto" },
-          { quality: "auto:good" },
-        ],
+        transformation: [{ fetch_format: "auto" }, { quality: "auto:good" }],
       },
       async (error, result) => {
         if (error) return reject(error);
@@ -32,7 +29,7 @@ const uploadSingleImage = (file, entityType, entityId, order, isCover) => {
         } catch (dbErr) {
           reject(dbErr);
         }
-      }
+      },
     );
 
     uploadStream.end(file.buffer);
@@ -43,7 +40,7 @@ exports.uploadImages = async (req, res) => {
   try {
     const entityType = req.params.entity_type;
     const entityId = Number(req.params.entity_id);
-
+const isCover = req.body.is_cover === "true";
     if (!entityType || !entityId) {
       return res.status(400).json({
         message: "entity_type and entity_id are required",
@@ -57,11 +54,17 @@ exports.uploadImages = async (req, res) => {
     }
 
     // 👇 هنا الفرق
-    const uploadedImages = await Promise.all(
-      req.files.map((file, index) =>
-        uploadSingleImage(file, entityType, entityId, index, index === 0),
-      ),
-    );
+const uploadedImages = await Promise.all(
+  req.files.map((file, index) =>
+    uploadSingleImage(
+      file,
+      entityType,
+      entityId,
+      index,
+      isCover && index === 0
+    ),
+  ),
+);
 
     // 👇 رجع داتا نظيفة للفرونت
     const response = uploadedImages.map((img) => ({
@@ -95,10 +98,7 @@ exports.deleteImage = async (req, res) => {
       return res.status(404).json({ message: "Image not found" });
     }
 
-    if (
-      image.entity_type !== entityType ||
-      image.entity_id !== entityId
-    ) {
+    if (image.entity_type !== entityType || image.entity_id !== entityId) {
       return res
         .status(400)
         .json({ message: "Image does not belong to the entity" });
@@ -131,10 +131,7 @@ exports.updateImage = async (req, res) => {
       return res.status(404).json({ message: "Image not found" });
     }
 
-    if (
-      image.entity_type !== entityType ||
-      image.entity_id !== entityId
-    ) {
+    if (image.entity_type !== entityType || image.entity_id !== entityId) {
       return res
         .status(400)
         .json({ message: "Image does not belong to the entity" });
@@ -154,8 +151,7 @@ exports.updateImage = async (req, res) => {
     await prisma.Images.update({
       where: { id: imageId },
       data: {
-        is_cover:
-          is_cover !== undefined ? is_cover : image.is_cover,
+        is_cover: is_cover !== undefined ? is_cover : image.is_cover,
         order: order !== undefined ? order : image.order,
       },
     });

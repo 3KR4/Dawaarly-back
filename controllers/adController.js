@@ -143,6 +143,9 @@ exports.createAd = async (req, res) => {
   try {
     const data = req.body;
 
+    console.log(data);
+    
+
     const requiredFields = [
       "title",
       "categoryId",
@@ -210,6 +213,12 @@ const buildUpdateData = (body) => {
     "subCategoryId",
     "display_phone",
     "display_whatsapp",
+    "Owner_No1",
+    "Owner_No2",
+    "delivery_no1 ",
+    "delivery_no1",
+    "payment_no1",
+    "payment_no2",
     "rent_amount",
     "rent_currency",
     "rent_frequency",

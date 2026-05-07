@@ -61,7 +61,8 @@ model RefreshToken {
   userId    Int
   expiresAt DateTime
   createdAt DateTime @default(now())
-  user      Users    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  user Users @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model SubscriptionRequests {
@@ -86,6 +87,13 @@ model D_Vacation {
   display_phone            Boolean                     @default(true)
   display_whatsapp         Boolean                     @default(true)
   display_dawaarly_contact Boolean                     @default(false)
+  Owner_No1               Int?
+  Owner_No2               Int?
+  delivery_no1                Int?
+  delivery_no2               Int?
+  payment_no1               Int?
+  payment_no2               Int?
+
   rent_amount              Decimal?                    @db.Decimal(12, 2)
   deposit_amount           Decimal?                    @db.Decimal(12, 2)
   min_rent_period          Int?
