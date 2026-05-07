@@ -40,6 +40,7 @@ model Users {
   favorites              AdFavorite[]
   AdminLogs              AdminLogs[]
   bookings               Booking[]              @relation("UserBookings")
+  blogs                  Blogs[]
   ads_created_as_admin   D_Vacation[]           @relation("AdminAds")
   ads_created_as_subuser D_Vacation[]           @relation("SubuserAds")
   refreshTokens          RefreshToken[]
@@ -60,7 +61,8 @@ model RefreshToken {
   userId    Int
   expiresAt DateTime
   createdAt DateTime @default(now())
-  user      Users    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  user Users @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model SubscriptionRequests {
@@ -80,11 +82,18 @@ model D_Vacation {
   status                   AdStatus                    @default(PENDING)
   featured_priority        Int                         @default(0)
   admin_id                 Int?
-  title                    String                      
+  title                    String
   description              String
   display_phone            Boolean                     @default(true)
   display_whatsapp         Boolean                     @default(true)
   display_dawaarly_contact Boolean                     @default(false)
+  Owner_No1               Int?
+  Owner_No2               Int?
+  delivery_no1                Int?
+  delivery_no2               Int?
+  payment_no1               Int?
+  payment_no2               Int?
+
   rent_amount              Decimal?                    @db.Decimal(12, 2)
   deposit_amount           Decimal?                    @db.Decimal(12, 2)
   min_rent_period          Int?
@@ -163,6 +172,7 @@ model Images {
   is_cover    Boolean         @default(false)
   order       Int?
   created_at  DateTime        @default(now())
+
   @@index([entity_type, entity_id])
 }
 
@@ -176,6 +186,18 @@ model AdReach {
 
   @@unique([ad_id, user_id])
   @@unique([ad_id, ip_address])
+}
+model BlogReach {
+  id         Int      @id @default(autoincrement())
+  blog_id    Int
+  user_id    Int?
+  ip_address String?
+  created_at DateTime @default(now())
+
+  blog Blogs @relation(fields: [blog_id], references: [id], onDelete: Cascade)
+
+  @@unique([blog_id, user_id])
+  @@unique([blog_id, ip_address])
 }
 
 model AdFavorite {
@@ -206,30 +228,61 @@ model Booking {
 }
 
 model Sliders {
-  id              Int      @id @default(autoincrement())
+  id Int @id @default(autoincrement())
 
-  title           Json
+  title Json
 
-  description     Json?
+  description Json?
 
-  link            String?
-  is_active       Boolean  @default(true)
+  link      String?
+  is_active Boolean @default(true)
 
-  order           Int      @default(0)
+  order Int @default(0)
 
-  created_at      DateTime @default(now())
+  created_at DateTime @default(now())
 }
 
 model Blogs {
-  id          Int      @id @default(autoincrement())
-  title       String
-  description String   @db.LongText
-  image       String?
-  json_data   Json?
-  created_at  DateTime @default(now())
-  updated_at  DateTime @updatedAt
-}
+  id Int @id @default(autoincrement())
 
+  slug String @unique
+
+  title_en String?
+  title_ar String?
+
+  description_en String? @db.LongText
+  description_ar String? @db.LongText
+
+  content_en Json?
+  content_ar Json?
+
+  meta_title_en String?
+  meta_title_ar String?
+
+  meta_desc_en String?
+  meta_desc_ar String?
+
+  tags Json?
+
+  author_id Int?
+
+  is_published Boolean @default(false)
+  published_at DateTime?
+
+  reading_time Int?
+
+  views_count Int @default(0)     
+  reach_count Int @default(0)   
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  author Users? @relation(fields: [author_id], references: [id])
+  blogReaches BlogReach[]
+  @@index([slug])
+  @@index([is_published, created_at])
+  
+}
 model AdminLogs {
   id         Int      @id @default(autoincrement())
   admin_id   Int
@@ -325,6 +378,7 @@ enum UserType {
   ADMIN
   SUBUSER
 }
+
 enum AllTables {
   VACATION
 }
