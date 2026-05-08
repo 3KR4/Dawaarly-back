@@ -144,7 +144,6 @@ exports.createAd = async (req, res) => {
     const data = req.body;
 
     console.log(data);
-    
 
     const requiredFields = [
       "title",
@@ -188,7 +187,7 @@ exports.createAd = async (req, res) => {
     const isAdmin =
       user?.is_super_admin || user?.permissions?.includes("create-ads");
 
-    const status = isAdmin ? "ACTIVE" : "PENDING";
+    const status = isAdmin ? "ACTIVE" : "PENDING";  
 
     const ad = await prisma.D_Vacation.create({
       data: {
