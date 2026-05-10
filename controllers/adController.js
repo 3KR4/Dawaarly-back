@@ -148,7 +148,6 @@ exports.createAd = async (req, res) => {
     const requiredFields = [
       "title",
       "categoryId",
-      "subCategoryId",
       "country_id",
       "governorate_id",
       "city_id",
