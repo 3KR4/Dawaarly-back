@@ -2,7 +2,7 @@ const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 exports.authorizeOwnerOrSuperAdmin = async (req, res, next) => {
   const { adId } = req.params;
-  const ad = await prisma.D_Vacation.findUnique({
+  const ad = await prisma.D_Vacation_Rent.findUnique({
     where: { id: Number(adId) },
   });
   if (!ad) return res.status(404).json({ message: "Ad not found" });

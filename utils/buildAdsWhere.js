@@ -8,9 +8,9 @@ const buildAdsWhere = (query, isAdmin) => {
     city_id,
     area_id,
     compound_id,
-    min_rent_amount,
-    max_rent_amount,
-    rent_currency,
+    min_price,
+    max_price,
+    currency,
     rent_frequency,
     min_deposit_amount,
     max_deposit_amount,
@@ -63,7 +63,7 @@ const buildAdsWhere = (query, isAdmin) => {
     if (max) filters.push({ [field]: { lte: Number(max) } });
   };
 
-  range("rent_amount", min_rent_amount, max_rent_amount);
+  range("price", min_price, max_price);
   range("deposit_amount", min_deposit_amount, max_deposit_amount);
   range("bedrooms", min_bedrooms, max_bedrooms);
   range("bathrooms", min_bathrooms, max_bathrooms);

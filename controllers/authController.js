@@ -118,7 +118,7 @@ async function serializeUser(user, requester = null) {
 
 // ================= ACTIVE ADS COUNT =================
 async function getActiveAdsCount(userId) {
-  return prisma.D_Vacation.count({
+  return prisma.D_Vacation_Rent.count({
     where: {
       status: "ACTIVE",
       OR: [{ admin_id: userId }, { subuser_id: userId }],
@@ -1006,7 +1006,7 @@ exports.getAllUsers = async (req, res) => {
 
     const userIds = users.map((u) => u.id);
 
-    const activeAdsCounts = await prisma.D_Vacation.groupBy({
+    const activeAdsCounts = await prisma.D_Vacation_Rent.groupBy({
       by: ["admin_id", "subuser_id"],
       where: {
         status: "ACTIVE",

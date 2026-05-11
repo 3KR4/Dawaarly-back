@@ -8,45 +8,68 @@ datasource db {
 }
 
 model Users {
-  id                     Int            @id @default(autoincrement())
-  full_name              String
-  email                  String         @unique
-  phone                  String         @unique
-  password               String
-  birth_date             DateTime?
-  is_super_admin         Boolean        @default(false)
-  tiktok_link            String?
-  facebook_link          String?
-  email_verified         Boolean        @default(false)
-  phone_verified         Boolean        @default(false)
-  subscription_ads_limit Int?           @default(0)
-  active_ads_count       Int            @default(0)
-  last_otp_sent_at       DateTime?
-  verification_code      String?
-  verification_expiry    DateTime?
-  admin_comment          String?
-  created_at             DateTime       @default(now())
-  city_id                Int?
-  country_id             Int?
-  governorate_id         Int?
-  language               String         @default("en")
-  theme                  String         @default("light")
-  interests              Json?
-  gender                 Gender?
-  user_type              UserType       @default(USER)
-  permissions            Json?
-  reset_password_code    String?
-  reset_password_expiry  DateTime?
-  favorites              AdFavorite[]
-  AdminLogs              AdminLogs[]
-  bookings               Booking[]      @relation("UserBookings")
-  blogs                  Blogs[]
-  ads_created_as_admin   D_Vacation[]   @relation("AdminAds")
-  ads_created_as_subuser D_Vacation[]   @relation("SubuserAds")
-  refreshTokens          RefreshToken[]
-  city                   Cities?        @relation(fields: [city_id], references: [id])
-  country                Countries?     @relation(fields: [country_id], references: [id])
-  governorate            Governorates?  @relation(fields: [governorate_id], references: [id])
+  id        Int    @id @default(autoincrement())
+  full_name String
+  email     String @unique
+  phone     String @unique
+  password  String
+
+  birth_date DateTime?
+
+  is_super_admin Boolean @default(false)
+
+  tiktok_link   String?
+  facebook_link String?
+
+  email_verified Boolean @default(false)
+  phone_verified Boolean @default(false)
+
+  subscription_ads_limit Int? @default(0)
+  active_ads_count       Int  @default(0)
+
+  last_otp_sent_at    DateTime?
+  verification_code   String?
+  verification_expiry DateTime?
+
+  reset_password_code   String?
+  reset_password_expiry DateTime?
+
+  admin_comment String?
+
+  language String @default("en")
+  theme    String @default("light")
+
+  interests Json?
+
+  gender Gender?
+
+  user_type UserType @default(USER)
+
+  permissions Json?
+
+  country_id     Int?
+  governorate_id Int?
+  city_id        Int?
+
+  created_at DateTime @default(now())
+
+  country     Countries?    @relation(fields: [country_id], references: [id])
+  governorate Governorates? @relation(fields: [governorate_id], references: [id])
+  city        Cities?       @relation(fields: [city_id], references: [id])
+
+  refreshTokens RefreshToken[]
+
+  blogs Blogs[]
+
+  adminLogs AdminLogs[]
+
+  favorites AdFavorite[]
+
+  bookings Booking[]
+
+  vacation_rent_ads D_Vacation_Rent[] @relation("VacationCreatedBy")
+  vacation_sale_ads D_Vacation_Sale[] @relation("VacationSaleCreatedBy")
+  adReaches         AdReach[]
 
   @@index([country_id])
   @@index([governorate_id])
@@ -54,179 +77,492 @@ model Users {
 }
 
 model RefreshToken {
-  id        Int      @id @default(autoincrement())
-  token     String   @unique
-  userId    Int
-  expiresAt DateTime
-  createdAt DateTime @default(now())
+  id Int @id @default(autoincrement())
 
-  user Users @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token String @unique
+
+  user_id Int
+
+  expires_at DateTime
+
+  created_at DateTime @default(now())
+
+  user Users @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
 }
 
-model D_Vacation {
-  id                       Int      @id @default(autoincrement())
-  status                   AdStatus @default(PENDING)
-  featured_priority        Int      @default(0)
-  admin_id                 Int?
-  title                    String
-  description              String
-  display_phone            Boolean  @default(true)
-  display_whatsapp         Boolean  @default(true)
-  display_dawaarly_contact Boolean  @default(false)
-  Owner_No1                String?
-  Owner_No2                String?
-  delivery_no1             String?
-  delivery_no2             String?
-  payment_no1              String?
-  payment_no2              String?
+model AllTables {
+  id Int @id @default(autoincrement())
 
-  rent_amount             Decimal?                    @db.Decimal(12, 2)
-  deposit_amount          Decimal?                    @db.Decimal(12, 2)
-  min_rent_period         Int?
-  available_from          DateTime?
-  available_to            DateTime?
-  country_id              Int
-  governorate_id          Int
-  city_id                 Int
-  area_id                 Int?
-  compound_id             Int?
-  bedrooms                Int?
-  bathrooms               Int?
-  level                   Int?
-  adult_no_max            Int?
-  child_no_max            Int?
-  am_seeview              Boolean                     @default(false)
-  am_pool                 Boolean                     @default(false)
-  am_balcony              Boolean                     @default(false)
-  am_private_garden       Boolean                     @default(false)
-  am_kitchen              Boolean                     @default(false)
-  am_ac                   Boolean                     @default(false)
-  am_heating              Boolean                     @default(false)
-  am_elevator             Boolean                     @default(false)
-  am_gym                  Boolean                     @default(false)
-  tags                    Json?
-  views_count             Int                         @default(0)
-  reach_count             Int                         @default(0)
-  favorites_count         Int                         @default(0)
-  created_at              DateTime                    @default(now())
-  updated_at              DateTime                    @updatedAt
-  subuser_id              Int?
-  categoryId              Int?
-  subCategoryId           Int?
-  was_previously_approved Boolean                     @default(false)
-  reject_reason           String?
-  rent_currency           Currency                    @default(EGP)
-  rent_frequency          RentFrequencyAndPeriodUnit?
-  min_rent_period_unit    RentFrequencyAndPeriodUnit?
-  status_changed_at       DateTime?
-  favorites               AdFavorite[]
-  adReaches               AdReach[]
-  Booking                 Booking[]
-  admin                   Users?                      @relation("AdminAds", fields: [admin_id], references: [id])
-  area                    Areas?                      @relation("AreaAds", fields: [area_id], references: [id])
-  Categories              Categories?                 @relation("CategoryAds", fields: [categoryId], references: [id])
-  city                    Cities                      @relation("CityAds", fields: [city_id], references: [id])
-  compound                Compounds?                  @relation("CompoundAds", fields: [compound_id], references: [id])
-  country                 Countries                   @relation("CountryAds", fields: [country_id], references: [id])
-  governorate             Governorates                @relation("GovernorateAds", fields: [governorate_id], references: [id])
-  SubCategories           SubCategories?              @relation("SubCategoryAds", fields: [subCategoryId], references: [id])
-  subuser                 Users?                      @relation("SubuserAds", fields: [subuser_id], references: [id])
+  name_ar String
+  name_en String
+
+  slug String @unique
+
+  created_at DateTime @default(now())
+
+  categories Categories[]
+
+  images          Images[]
+  favorites       AdFavorite[]
+  bookings        Booking[]
+  reaches         AdReach[]
+  D_Vacation_Rent D_Vacation_Rent[]
+  D_Vacation_Sale D_Vacation_Sale[]
+}
+
+model Categories {
+  id Int @id @default(autoincrement())
+
+  table_id Int
+
+  name_ar String
+  name_en String
+
+  created_at DateTime @default(now())
+
+  table AllTables @relation(fields: [table_id], references: [id], onDelete: Cascade)
+
+  subCategories SubCategories[]
+
+  vacation_rent_ads D_Vacation_Rent[]
+  vacation_sale_ads D_Vacation_Sale[]
+
+  @@index([table_id])
+}
+
+model SubCategories {
+  id Int @id @default(autoincrement())
+
+  category_id Int
+
+  name_ar String
+  name_en String
+
+  created_at DateTime @default(now())
+
+  category Categories @relation(fields: [category_id], references: [id], onDelete: Cascade)
+
+  vacation_rent_ads D_Vacation_Rent[]
+  vacation_sale_ads D_Vacation_Sale[]
+
+  @@index([category_id])
+}
+
+model Countries {
+  id Int @id @default(autoincrement())
+
+  name_ar String
+  name_en String
+
+  governorates Governorates[]
+
+  users Users[]
+
+  vacation_rent_ads D_Vacation_Rent[]
+  vacation_sale_ads D_Vacation_Sale[]
+}
+
+model Governorates {
+  id Int @id @default(autoincrement())
+
+  country_id Int
+
+  name_ar String
+  name_en String
+
+  country Countries @relation(fields: [country_id], references: [id], onDelete: Cascade)
+
+  cities Cities[]
+
+  users Users[]
+
+  vacation_rent_ads D_Vacation_Rent[]
+  vacation_sale_ads D_Vacation_Sale[]
+
+  @@index([country_id])
+}
+
+model Cities {
+  id Int @id @default(autoincrement())
+
+  governorate_id Int
+
+  name_ar String
+  name_en String
+
+  governorate Governorates @relation(fields: [governorate_id], references: [id], onDelete: Cascade)
+
+  areas Areas[]
+
+  compounds Compounds[]
+
+  users Users[]
+
+  vacation_rent_ads D_Vacation_Rent[]
+  vacation_sale_ads D_Vacation_Sale[]
+
+  @@index([governorate_id])
+}
+
+model Areas {
+  id Int @id @default(autoincrement())
+
+  city_id Int
+
+  name_ar String
+  name_en String
+
+  city Cities @relation(fields: [city_id], references: [id], onDelete: Cascade)
+
+  compounds Compounds[]
+
+  vacation_rent_ads D_Vacation_Rent[]
+  vacation_sale_ads D_Vacation_Sale[]
+
+  @@index([city_id])
+}
+
+model Compounds {
+  id Int @id @default(autoincrement())
+
+  city_id Int
+  area_id Int?
+
+  name_ar String
+  name_en String
+
+  city Cities @relation(fields: [city_id], references: [id], onDelete: Cascade)
+
+  area Areas? @relation(fields: [area_id], references: [id], onDelete: Cascade)
+
+  vacation_rent_ads D_Vacation_Rent[]
+  vacation_sale_ads D_Vacation_Sale[]
+
+  @@index([city_id])
+  @@index([area_id])
+}
+
+model D_Vacation_Rent {
+  id       Int      @id @default(autoincrement())
+  table_id Int
+  status   AdStatus @default(PENDING)
+
+  featured_priority Int @default(0)
+
+  title       String
+  description String @db.VarChar(1200)
+
+  display_phone            Boolean @default(true)
+  display_whatsapp         Boolean @default(true)
+  display_dawaarly_contact Boolean @default(false)
+
+  owner_no1 String?
+  owner_no2 String?
+
+  delivery_no1 String?
+  delivery_no2 String?
+
+  payment_no1 String?
+  payment_no2 String?
+
+  price Decimal? @db.Decimal(12, 2)
+
+  deposit_amount Decimal? @db.Decimal(12, 2)
+
+  rent_frequency       RentFrequencyAndPeriodUnit?
+  min_rent_period      Int?
+  min_rent_period_unit RentFrequencyAndPeriodUnit?
+
+  available_from DateTime?
+  available_to   DateTime?
+
+  currency Currency @default(EGP)
+
+  country_id     Int
+  governorate_id Int
+  city_id        Int
+
+  area_id     Int?
+  compound_id Int?
+
+  categoryId    Int?
+  subCategoryId Int?
+
+  bedrooms  Int?
+  bathrooms Int?
+
+  area_m2 Int?
+
+  level Int?
+
+  adult_no_max Int?
+  child_no_max Int?
+
+  am_seeview        Boolean @default(false)
+  am_pool           Boolean @default(false)
+  am_balcony        Boolean @default(false)
+  am_private_garden Boolean @default(false)
+  am_kitchen        Boolean @default(false)
+  am_ac             Boolean @default(false)
+  am_heating        Boolean @default(false)
+  am_elevator       Boolean @default(false)
+  am_gym            Boolean @default(false)
+
+  views_count     Int @default(0)
+  reach_count     Int @default(0)
+  favorites_count Int @default(0)
+
+  tags Json?
+
+  was_previously_approved Boolean @default(false)
+
+  reject_reason String?
+
+  status_changed_at DateTime?
+
+  user_id Int?
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  user Users? @relation("VacationCreatedBy", fields: [user_id], references: [id])
+
+  country Countries @relation(fields: [country_id], references: [id])
+
+  governorate Governorates @relation(fields: [governorate_id], references: [id])
+
+  city Cities @relation(fields: [city_id], references: [id])
+
+  area Areas? @relation(fields: [area_id], references: [id])
+
+  compound Compounds? @relation(fields: [compound_id], references: [id])
+
+  category Categories? @relation(fields: [categoryId], references: [id])
+
+  subCategory SubCategories? @relation(fields: [subCategoryId], references: [id])
+
+  table AllTables @relation(fields: [table_id], references: [id])
 
   @@index([status])
-  @@index([status, created_at])
-  @@index([city_id])
+  @@index([table_id])
+  @@index([featured_priority])
+  @@index([country_id])
   @@index([governorate_id])
+  @@index([city_id])
   @@index([area_id])
   @@index([compound_id])
   @@index([categoryId])
   @@index([subCategoryId])
-  @@index([rent_amount])
-  @@index([deposit_amount])
-  @@index([featured_priority])
-  @@index([status, categoryId, rent_amount, city_id, created_at])
-  @@index([status, subCategoryId, rent_amount, city_id, created_at])
+  @@index([price])
+  @@index([status, created_at])
   @@index([status, featured_priority])
+  @@index([status, categoryId, price, city_id])
+  @@index([status, subCategoryId, price, city_id])
+}
+
+model D_Vacation_Sale {
+  id       Int      @id @default(autoincrement())
+  table_id Int
+  status   AdStatus @default(PENDING)
+
+  featured_priority Int @default(0)
+
+  title       String
+  description String @db.VarChar(1200)
+
+  display_phone            Boolean @default(true)
+  display_whatsapp         Boolean @default(true)
+  display_dawaarly_contact Boolean @default(false)
+
+  owner_no1 String?
+  owner_no2 String?
+
+  delivery_no1 String?
+  delivery_no2 String?
+
+  payment_no1 String?
+  payment_no2 String?
+
+  price Decimal? @db.Decimal(12, 2)
+
+  payment_method PaymentMethod?
+
+  down_payment Decimal? @db.Decimal(12, 2)
+
+  installment_years Int?
+
+  ready_to_move Boolean @default(false)
+
+  furnished Boolean @default(false)
+
+  currency Currency @default(EGP)
+
+  country_id     Int
+  governorate_id Int
+  city_id        Int
+
+  area_id     Int?
+  compound_id Int?
+
+  categoryId    Int?
+  subCategoryId Int?
+
+  bedrooms  Int?
+  bathrooms Int?
+
+  area_m2 Int?
+
+  level Int?
+
+  am_seeview        Boolean @default(false)
+  am_pool           Boolean @default(false)
+  am_balcony        Boolean @default(false)
+  am_private_garden Boolean @default(false)
+  am_kitchen        Boolean @default(false)
+  am_ac             Boolean @default(false)
+  am_heating        Boolean @default(false)
+  am_elevator       Boolean @default(false)
+  am_gym            Boolean @default(false)
+
+  views_count     Int @default(0)
+  reach_count     Int @default(0)
+  favorites_count Int @default(0)
+
+  tags Json?
+
+  was_previously_approved Boolean @default(false)
+
+  reject_reason String?
+
+  status_changed_at DateTime?
+
+  user_id Int?
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  user Users? @relation("VacationSaleCreatedBy", fields: [user_id], references: [id])
+
+  country Countries @relation(fields: [country_id], references: [id])
+
+  governorate Governorates @relation(fields: [governorate_id], references: [id])
+
+  city Cities @relation(fields: [city_id], references: [id])
+
+  area Areas? @relation(fields: [area_id], references: [id])
+
+  compound Compounds? @relation(fields: [compound_id], references: [id])
+
+  category Categories? @relation(fields: [categoryId], references: [id])
+
+  subCategory SubCategories? @relation(fields: [subCategoryId], references: [id])
+
+  table AllTables @relation(fields: [table_id], references: [id])
+
+  @@index([status])
+  @@index([table_id])
+  @@index([featured_priority])
+  @@index([country_id])
+  @@index([governorate_id])
+  @@index([city_id])
+  @@index([area_id])
+  @@index([compound_id])
+  @@index([categoryId])
+  @@index([subCategoryId])
+  @@index([price])
+  @@index([status, created_at])
+  @@index([status, featured_priority])
+  @@index([status, categoryId, price, city_id])
+  @@index([status, subCategoryId, price, city_id])
 }
 
 model Images {
-  id          Int             @id @default(autoincrement())
-  public_id   String
-  secure_url  String
-  folder      String?
-  entity_type ImageEntityType
-  entity_id   Int
-  is_cover    Boolean         @default(false)
-  order       Int?
-  created_at  DateTime        @default(now())
+  id Int @id @default(autoincrement())
 
-  @@index([entity_type, entity_id])
-}
+  entity_id Int
+  table_id  Int
 
-model AdReach {
-  id         Int        @id @default(autoincrement())
-  ad_id      Int
-  user_id    Int?
-  ip_address String?
-  created_at DateTime   @default(now())
-  ad         D_Vacation @relation(fields: [ad_id], references: [id], onDelete: Cascade)
+  public_id  String
+  secure_url String
 
-  @@unique([ad_id, user_id])
-  @@unique([ad_id, ip_address])
-}
+  is_cover Boolean @default(false)
 
-model BlogReach {
-  id         Int      @id @default(autoincrement())
-  blog_id    Int
-  user_id    Int?
-  ip_address String?
+  order Int?
+
   created_at DateTime @default(now())
 
-  blog Blogs @relation(fields: [blog_id], references: [id], onDelete: Cascade)
+  table AllTables @relation(fields: [table_id], references: [id], onDelete: Cascade)
 
-  @@unique([blog_id, user_id])
-  @@unique([blog_id, ip_address])
+  @@index([entity_id, table_id])
+  @@index([table_id])
 }
 
 model AdFavorite {
-  id      Int        @id @default(autoincrement())
-  ad_id   Int
-  user_id Int
-  ad      D_Vacation @relation(fields: [ad_id], references: [id], onDelete: Cascade)
-  user    Users      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  id Int @id @default(autoincrement())
 
-  @@unique([ad_id, user_id])
+  entity_id Int
+  table_id  Int
+
+  user_id Int
+
+  created_at DateTime @default(now())
+
+  table AllTables @relation(fields: [table_id], references: [id], onDelete: Cascade)
+
+  user Users @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([entity_id, table_id, user_id])
+  @@index([entity_id, table_id])
+  @@index([user_id])
 }
 
 model Booking {
-  id         Int           @id @default(autoincrement())
-  ad_id      Int
-  user_id    Int
-  from_date  DateTime
-  to_date    DateTime
-  created_at DateTime      @default(now())
-  updated_at DateTime      @updatedAt
-  status     BookingStatus @default(PENDING)
-  ad         D_Vacation    @relation(fields: [ad_id], references: [id], onDelete: Cascade)
-  user       Users         @relation("UserBookings", fields: [user_id], references: [id])
-
-  @@index([status])
-  @@index([user_id])
-  @@index([ad_id])
-}
-
-model Sliders {
   id Int @id @default(autoincrement())
 
-  title Json
+  entity_id Int
+  table_id  Int
 
-  description Json?
+  user_id Int
 
-  link      String?
-  is_active Boolean @default(true)
+  from_date DateTime
+  to_date   DateTime
 
-  order Int @default(0)
+  status BookingStatus @default(PENDING)
 
   created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  table AllTables @relation(fields: [table_id], references: [id])
+
+  user Users @relation(fields: [user_id], references: [id])
+
+  @@index([entity_id, table_id, status])
+  @@index([entity_id, table_id])
+  @@index([user_id])
+  @@index([status])
+}
+
+model AdReach {
+  id Int @id @default(autoincrement())
+
+  entity_id Int
+  table_id  Int
+
+  user_id Int?
+
+  ip_address String?
+
+  created_at DateTime @default(now())
+
+  table   AllTables @relation(fields: [table_id], references: [id], onDelete: Cascade)
+  Users   Users?    @relation(fields: [usersId], references: [id])
+  usersId Int?
+
+  @@unique([entity_id, table_id, user_id])
+  @@unique([entity_id, table_id, ip_address])
+  @@index([entity_id, table_id])
 }
 
 model Blogs {
@@ -237,8 +573,8 @@ model Blogs {
   title_en String?
   title_ar String?
 
-  description_en String? @db.LongText
-  description_ar String? @db.LongText
+  description_en String @db.VarChar(1200)
+  description_ar String @db.VarChar(1200)
 
   content_en Json?
   content_ar Json?
@@ -253,7 +589,8 @@ model Blogs {
 
   author_id Int?
 
-  is_published Boolean   @default(false)
+  is_published Boolean @default(false)
+
   published_at DateTime?
 
   reading_time Int?
@@ -264,133 +601,69 @@ model Blogs {
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
-  author      Users?      @relation(fields: [author_id], references: [id])
+  author Users? @relation(fields: [author_id], references: [id])
+
   blogReaches BlogReach[]
 
   @@index([slug])
   @@index([is_published, created_at])
 }
 
-model AdminLogs {
-  id         Int      @id @default(autoincrement())
-  admin_id   Int
-  action     String
-  entity     String
-  entity_id  Int
+model BlogReach {
+  id Int @id @default(autoincrement())
+
+  blog_id Int
+
+  user_id Int?
+
+  ip_address String?
+
   created_at DateTime @default(now())
-  admin      Users    @relation(fields: [admin_id], references: [id])
+
+  blog Blogs @relation(fields: [blog_id], references: [id], onDelete: Cascade)
+
+  @@unique([blog_id, user_id])
+  @@unique([blog_id, ip_address])
 }
 
-model AllTables {
-  id      Int    @id @default(autoincrement())
-  name_ar String
-  name_en String
-
-  categories Categories[]
-}
-
-model Categories {
+model Sliders {
   id Int @id @default(autoincrement())
 
-  table_id Int
-  name_ar  String
-  name_en  String
+  title Json
 
-  ads           D_Vacation[]    @relation("CategoryAds")
-  subCategories SubCategories[]
+  description Json?
 
-  table AllTables @relation(fields: [table_id], references: [id], onDelete: Cascade)
+  link String?
+
+  is_active Boolean @default(true)
+
+  order Int @default(0)
+
+  created_at DateTime @default(now())
 }
 
-model SubCategories {
+model AdminLogs {
   id Int @id @default(autoincrement())
 
-  category_id Int
-  name_ar     String
-  name_en     String
+  admin_id Int
 
-  ads D_Vacation[] @relation("SubCategoryAds")
+  action String
 
-  category Categories @relation(fields: [category_id], references: [id], onDelete: Cascade)
-}
+  entity String
 
-model Countries {
-  id           Int            @id @default(autoincrement())
-  name_ar      String
-  name_en      String
-  ads          D_Vacation[]   @relation("CountryAds")
-  governorates Governorates[]
-  users        Users[]
-}
+  entity_id Int
 
-model Governorates {
-  id         Int          @id @default(autoincrement())
-  country_id Int
-  name_ar    String
-  name_en    String
-  cities     Cities[]
-  ads        D_Vacation[] @relation("GovernorateAds")
-  country    Countries    @relation(fields: [country_id], references: [id], onDelete: Cascade)
-  users      Users[]
+  created_at DateTime @default(now())
 
-  @@index([country_id])
-}
+  admin Users @relation(fields: [admin_id], references: [id])
 
-model Cities {
-  id             Int          @id @default(autoincrement())
-  governorate_id Int
-  name_ar        String
-  name_en        String
-  areas          Areas[]
-  governorate    Governorates @relation(fields: [governorate_id], references: [id], onDelete: Cascade)
-  compounds      Compounds[]
-  ads            D_Vacation[] @relation("CityAds")
-  users          Users[]
-
-  @@index([governorate_id])
-}
-
-model Areas {
-  id        Int          @id @default(autoincrement())
-  city_id   Int
-  name_ar   String
-  name_en   String
-  city      Cities       @relation(fields: [city_id], references: [id], onDelete: Cascade)
-  compounds Compounds[]
-  ads       D_Vacation[] @relation("AreaAds")
-
-  @@index([city_id])
-}
-
-model Compounds {
-  id      Int          @id @default(autoincrement())
-  area_id Int?
-  name_ar String
-  name_en String
-  city_id Int
-  area    Areas?       @relation(fields: [area_id], references: [id], onDelete: Cascade)
-  city    Cities       @relation(fields: [city_id], references: [id], onDelete: Cascade)
-  ads     D_Vacation[] @relation("CompoundAds")
-
-  @@index([city_id])
-  @@index([area_id])
+  @@index([admin_id])
 }
 
 enum UserType {
   USER
   ADMIN
   SUBUSER
-}
-
-enum Permission {
-  CREATE_AD
-  DELETE_AD
-  UPDATE_AD
-  BOOKINGS
-  SLIDERS
-  VIEW_ANALYTICS
-  CHANGE_ADS_STATUS
-  ASSIGN_RESPONSIBILITY
 }
 
 enum Gender {
@@ -412,14 +685,10 @@ enum RentFrequencyAndPeriodUnit {
   MONTH
 }
 
-enum ImageEntityType {
-  AD
-  SLIDER
-  USER
-  CATEGORY
-  BLOG
-  AREA
-  COMPOUND
+enum PaymentMethod {
+  CASH
+  INSTALLMENTS
+  CASH_OR_INSTALLMENTS
 }
 
 enum AdStatus {
@@ -427,12 +696,6 @@ enum AdStatus {
   ACTIVE
   REJECTED
   DISABLED
-}
-
-enum RequestStatus {
-  PENDING
-  APPROVED
-  REJECTED
 }
 
 enum BookingStatus {

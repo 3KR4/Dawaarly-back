@@ -1,0 +1,32 @@
+module.exports = {
+  required: [
+    "title",
+    "country_id",
+    "governorate_id",
+    "city_id",
+    "categoryId",
+    "table_id",
+    "currency",
+    "price",
+  ],
+
+  optional: [
+    "description",
+    "area_id",
+    "compound_id",
+    "subCategoryId",
+    "tags",
+    "display_phone",
+    "display_whatsapp",
+    "display_dawaarly_contact",
+    "owner_no1",
+    "owner_no2",
+    "delivery_no1",
+    "delivery_no2",
+    "payment_no1",
+    "payment_no2",
+    "was_previously_approved",
+    "reject_reason",
+    "status_changed_at",
+  ],
+};

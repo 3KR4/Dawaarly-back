@@ -1,10 +1,12 @@
 const { PrismaClient } = require("@prisma/client");
-const prisma = new PrismaClient();
+
+const db = new PrismaClient();
 const cloudinary = require("../utils/cloudinary");
 const buildAdsWhere = require("../utils/buildAdsWhere");
 const { pagination } = require("../utils/pagination");
 const { getCache, setCache, deleteCachePattern } = require("../utils/redis");
 const { validateAdDates } = require("../utils/validation");
+
 const adIncludeRelations = {
   admin: {
     select: {
@@ -48,9 +50,9 @@ function formatListAd(ad) {
   return {
     id: ad.id,
     title: ad.title,
-    rent_amount: ad.rent_amount,
+    price: ad.price,
     deposit_amount: ad.deposit_amount,
-    rent_currency: ad.rent_currency,
+    currency: ad.currency,
     rent_frequency: ad.rent_frequency,
     status: ad.status,
     created_at: ad.created_at,
@@ -139,68 +141,101 @@ async function enrichAds(ads, userId = null, mode = "list") {
     };
   });
 }
+const validateCreateAd = require("../utils/ads/validators/validateCreateAd");
+const getModel = require("../utils/ads/services/getModel");
+
 exports.createAd = async (req, res) => {
   try {
     const data = req.body;
 
-    console.log(data);
+    // =========================
+    // VALIDATION
+    // =========================
+    const validation = validateCreateAd(data);
 
-    const requiredFields = [
-      "title",
-      "categoryId",
-      "country_id",
-      "governorate_id",
-      "city_id",
-      "rent_frequency",
-      "rent_currency",
-      "deposit_amount",
-      "rent_amount",
-      "bedrooms",
-      "bathrooms",
-      "level",
-    ];
-
-    const missing = requiredFields.filter(
-      (f) => data[f] === undefined || data[f] === null,
-    );
-
-    if (missing.length) {
-      return res.status(400).json({ message: "Missing fields", missing });
+    if (validation.error) {
+      return res.status(400).json(validation);
     }
 
-    if (data.available_from && data.available_to) {
-      if (!validateAdDates(data.available_from, data.available_to)) {
-        return res.status(400).json({ message: "Invalid dates" });
-      }
+    const { table } = validation;
+
+    // =========================
+    // DYNAMIC MODEL
+    // =========================
+    const model = table.model;
+
+    if (!prisma[model]) {
+      return res.status(400).json({
+        message: `Model ${model} not found`,
+      });
     }
 
+    // =========================
+    // USER DATA
+    // =========================
     const user = req.user;
 
-    const userData =
-      user.user_type === "ADMIN"
-        ? { admin_id: user.id }
-        : user.user_type === "SUBUSER"
-          ? { subuser_id: user.id }
-          : {};
-
+    // =========================
+    // STATUS LOGIC
+    // =========================
     const isAdmin =
-      user?.is_super_admin || user?.permissions?.includes("create-ads");
+      user?.is_super_admin || user?.permissions?.includes("CREATE_AD");
 
-    const status = isAdmin ? "ACTIVE" : "PENDING";  
+    const status = isAdmin ? "ACTIVE" : "PENDING";
 
-    const ad = await prisma.D_Vacation.create({
+    // =========================
+    // BUILD CREATE DATA
+    // =========================
+    const createData = {
+      ...data,
+
+      table_id: Number(data.table_id),
+
+      user_id: user.id,
+
+      status,
+
+      status_changed_at: isAdmin ? new Date() : null,
+    };
+
+    // =========================
+    // DATE CASTING
+    // =========================
+    if (data.available_from) {
+      createData.available_from = new Date(data.available_from);
+    }
+
+    if (data.available_to) {
+      createData.available_to = new Date(data.available_to);
+    }
+
+    // =========================
+    // CREATE AD
+    // =========================
+    const ad = await prisma[model].create({
+      data: createData,
+    });
+
+    // =========================
+    // RESPONSE
+    // =========================
+    return res.status(201).json({
+      success: true,
+      message: "Ad created successfully",
       data: {
-        ...data,
-        ...userData,
-        status,
-        status_changed_at: isAdmin ? new Date() : null,
+        id: ad.id,
+        table_id: Number(data.table_id),
+        model,
+        status: ad.status,
       },
     });
-    await deleteCachePattern("ads:list:*");
-    await deleteCachePattern("sections:*");
-    res.status(201).json({ message: "Ad created", adId: ad.id });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    console.log(err);
+
+    return res.status(500).json({
+      success: false,
+      message: err.message,
+    });
   }
 };
 const buildUpdateData = (body) => {
@@ -217,8 +252,8 @@ const buildUpdateData = (body) => {
     "delivery_no1",
     "payment_no1",
     "payment_no2",
-    "rent_amount",
-    "rent_currency",
+    "price",
+    "currency",
     "rent_frequency",
     "deposit_amount",
     "min_rent_period",
@@ -263,7 +298,7 @@ exports.updateAd = async (req, res) => {
   try {
     const adId = Number(req.params.adId);
 
-    const ad = await prisma.D_Vacation.findUnique({
+    const ad = await prisma.D_Vacation_Rent.findUnique({
       where: { id: adId },
     });
 
@@ -289,7 +324,7 @@ exports.updateAd = async (req, res) => {
       dataToUpdate.was_previously_approved = true;
     }
 
-    const updatedAd = await prisma.D_Vacation.update({
+    const updatedAd = await prisma.D_Vacation_Rent.update({
       where: { id: adId },
       data: dataToUpdate,
     });
@@ -311,7 +346,7 @@ exports.deleteAd = async (req, res) => {
   try {
     const adId = Number(req.params.adId);
 
-    const ad = await prisma.D_Vacation.findUnique({
+    const ad = await prisma.D_Vacation_Rent.findUnique({
       where: { id: adId },
     });
 
@@ -337,7 +372,7 @@ exports.deleteAd = async (req, res) => {
       images.map((img) => cloudinary.uploader.destroy(img.public_id)),
     );
 
-    await prisma.D_Vacation.delete({
+    await prisma.D_Vacation_Rent.delete({
       where: { id: adId },
     });
     await deleteCachePattern("ads:list:*");
@@ -356,7 +391,7 @@ exports.changeAdStatus = async (req, res) => {
     const { status, reason } = req.body;
 
     // 🔹 نجيب الإعلان من قاعدة البيانات
-    const ad = await prisma.D_Vacation.findUnique({
+    const ad = await prisma.D_Vacation_Rent.findUnique({
       where: { id: Number(adId) },
     });
 
@@ -405,7 +440,7 @@ exports.changeAdStatus = async (req, res) => {
     }
 
     // 🔹 تحديث الإعلان
-    const updatedAd = await prisma.D_Vacation.update({
+    const updatedAd = await prisma.D_Vacation_Rent.update({
       where: { id: Number(adId) },
       data: {
         status,
@@ -462,13 +497,13 @@ exports.assignAdmin = async (req, res) => {
     }
 
     // 3. التحقق من وجود الإعلان
-    const ad = await prisma.D_Vacation.findUnique({
+    const ad = await prisma.D_Vacation_Rent.findUnique({
       where: { id: adId },
     });
 
     if (!ad) return res.status(404).json({ message: "Ad not found" });
 
-    await prisma.D_Vacation.update({
+    await prisma.D_Vacation_Rent.update({
       where: { id: adId },
       data: {
         admin_id,
@@ -508,14 +543,14 @@ exports.getAllAds = async (req, res) => {
     if (cached) return res.json(cached);
 
     const [ads, total] = await Promise.all([
-      prisma.D_Vacation.findMany({
+      prisma.D_Vacation_Rent.findMany({
         where,
         skip,
         take: limit,
         orderBy: { created_at: "desc" },
         include: adIncludeListRelations,
       }),
-      prisma.D_Vacation.count({ where }),
+      prisma.D_Vacation_Rent.count({ where }),
     ]);
 
     const data = await enrichAds(ads, userId, "list");
@@ -541,7 +576,7 @@ exports.getAd = async (req, res) => {
   try {
     const adId = Number(req.params.adId);
 
-    const ad = await prisma.D_Vacation.findUnique({
+    const ad = await prisma.D_Vacation_Rent.findUnique({
       where: { id: adId },
       include: adIncludeRelations,
     });
@@ -551,7 +586,7 @@ exports.getAd = async (req, res) => {
     const userId = req.user?.id || null;
     const [adminActiveAdsCount, subuserActiveAdsCount] = await Promise.all([
       ad.admin?.id
-        ? prisma.D_Vacation.count({
+        ? prisma.D_Vacation_Rent.count({
             where: {
               admin_id: ad.admin.id,
               status: "ACTIVE",
@@ -559,7 +594,7 @@ exports.getAd = async (req, res) => {
           })
         : null,
       ad.subuser?.id
-        ? prisma.D_Vacation.count({
+        ? prisma.D_Vacation_Rent.count({
             where: {
               subuser_id: ad.subuser.id,
               status: "ACTIVE",
@@ -612,14 +647,14 @@ exports.getUserAds = async (req, res) => {
     };
 
     const [ads, total] = await Promise.all([
-      prisma.D_Vacation.findMany({
+      prisma.D_Vacation_Rent.findMany({
         where,
         skip,
         take: limit,
         orderBy: { created_at: "desc" },
         include: adIncludeListRelations,
       }),
-      prisma.D_Vacation.count({ where }),
+      prisma.D_Vacation_Rent.count({ where }),
     ]);
 
     const data = await enrichAds(ads, req.user?.id, "list");
@@ -659,14 +694,14 @@ exports.getSectionsAds = async (req, res) => {
     if (type === "compound") where.compound_id = Number(value);
 
     const [ads, total] = await Promise.all([
-      prisma.D_Vacation.findMany({
+      prisma.D_Vacation_Rent.findMany({
         where,
         skip,
         take: limit,
         orderBy: { created_at: "desc" },
         include: adIncludeListRelations,
       }),
-      prisma.D_Vacation.count({ where }),
+      prisma.D_Vacation_Rent.count({ where }),
     ]);
 
     const data = await enrichAds(ads, req.user?.id, "list");
@@ -726,7 +761,7 @@ exports.toggleFavorite = async (req, res) => {
     const adId = Number(req.params.adId);
 
     // 🔹 تأكد إن الإعلان موجود
-    const ad = await prisma.D_Vacation.findUnique({
+    const ad = await prisma.D_Vacation_Rent.findUnique({
       where: { id: adId },
     });
 
@@ -749,7 +784,7 @@ exports.toggleFavorite = async (req, res) => {
             ad_id_user_id: { ad_id: adId, user_id: userId },
           },
         }),
-        prisma.D_Vacation.update({
+        prisma.D_Vacation_Rent.update({
           where: { id: adId },
           data: {
             favorites_count: {
@@ -766,7 +801,7 @@ exports.toggleFavorite = async (req, res) => {
             user_id: userId,
           },
         }),
-        prisma.D_Vacation.update({
+        prisma.D_Vacation_Rent.update({
           where: { id: adId },
           data: {
             favorites_count: {
