@@ -2,13 +2,25 @@ const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 const cloudinary = require("../utils/cloudinary");
 
-// helper: upload single file to cloudinary + save to DB
-const uploadSingleImage = (file, entityType, entityId, order, isCover) => {
+// =========================
+// HELPER: Upload Single Image
+// =========================
+const uploadSingleImage = (
+  file,
+  entityType,
+  entityId,
+  tableId,
+  order,
+  isCover,
+) => {
   return new Promise((resolve, reject) => {
     const uploadStream = cloudinary.uploader.upload_stream(
       {
         folder: `${entityType.toLowerCase()}/${entityId}`,
-        transformation: [{ fetch_format: "auto" }, { quality: "auto:good" }],
+        transformation: [
+          { fetch_format: "auto" },
+          { quality: "auto:good" },
+        ],
       },
       async (error, result) => {
         if (error) return reject(error);
@@ -18,8 +30,13 @@ const uploadSingleImage = (file, entityType, entityId, order, isCover) => {
             data: {
               entity_type: entityType,
               entity_id: entityId,
+
+              // only for ADS (optional for others)
+              table_id: tableId || 0,
+
               public_id: result.public_id,
               secure_url: result.secure_url,
+
               is_cover: isCover,
               order: order,
             },
@@ -36,11 +53,19 @@ const uploadSingleImage = (file, entityType, entityId, order, isCover) => {
   });
 };
 
+// =========================
+// UPLOAD IMAGES
+// =========================
 exports.uploadImages = async (req, res) => {
   try {
-    const entityType = req.params.entity_type;
+    const entityType = req.params.entity_type; // AD | BLOG | SLIDER
     const entityId = Number(req.params.entity_id);
-const isCover = req.body.is_cover === "true";
+    const tableId = req.params.table_id
+      ? Number(req.body.table_id)
+      : null;
+
+    const isCover = req.body.is_cover === "true";
+
     if (!entityType || !entityId) {
       return res.status(400).json({
         message: "entity_type and entity_id are required",
@@ -53,20 +78,19 @@ const isCover = req.body.is_cover === "true";
       });
     }
 
-    // 👇 هنا الفرق
-const uploadedImages = await Promise.all(
-  req.files.map((file, index) =>
-    uploadSingleImage(
-      file,
-      entityType,
-      entityId,
-      index,
-      isCover && index === 0
-    ),
-  ),
-);
+    const uploadedImages = await Promise.all(
+      req.files.map((file, index) =>
+        uploadSingleImage(
+          file,
+          entityType,
+          entityId,
+          tableId,
+          index,
+          isCover && index === 0,
+        ),
+      ),
+    );
 
-    // 👇 رجع داتا نظيفة للفرونت
     const response = uploadedImages.map((img) => ({
       id: img.id,
       url: img.secure_url,
@@ -74,16 +98,20 @@ const uploadedImages = await Promise.all(
       order: img.order,
     }));
 
-    res.status(201).json(response);
+    return res.status(201).json(response);
   } catch (err) {
     console.error(err);
-    res.status(500).json({
+
+    return res.status(500).json({
       message: "Server Error",
       error: err.message,
     });
   }
 };
 
+// =========================
+// DELETE IMAGE
+// =========================
 exports.deleteImage = async (req, res) => {
   try {
     const entityType = req.params.entity_type;
@@ -98,22 +126,37 @@ exports.deleteImage = async (req, res) => {
       return res.status(404).json({ message: "Image not found" });
     }
 
-    if (image.entity_type !== entityType || image.entity_id !== entityId) {
-      return res
-        .status(400)
-        .json({ message: "Image does not belong to the entity" });
+    if (
+      image.entity_type !== entityType ||
+      image.entity_id !== entityId
+    ) {
+      return res.status(400).json({
+        message: "Image does not belong to the entity",
+      });
     }
 
     await cloudinary.uploader.destroy(image.public_id);
-    await prisma.Images.delete({ where: { id: imageId } });
 
-    res.status(200).json({ message: "Image deleted successfully" });
+    await prisma.Images.delete({
+      where: { id: imageId },
+    });
+
+    return res
+      .status(200)
+      .json({ message: "Image deleted successfully" });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: "Server Error", error: err.message });
+
+    return res.status(500).json({
+      message: "Server Error",
+      error: err.message,
+    });
   }
 };
 
+// =========================
+// UPDATE IMAGE
+// =========================
 exports.updateImage = async (req, res) => {
   try {
     const entityType = req.params.entity_type;
@@ -128,17 +171,24 @@ exports.updateImage = async (req, res) => {
     });
 
     if (!image) {
-      return res.status(404).json({ message: "Image not found" });
+      return res.status(404).json({
+        message: "Image not found",
+      });
     }
 
-    if (image.entity_type !== entityType || image.entity_id !== entityId) {
-      return res
-        .status(400)
-        .json({ message: "Image does not belong to the entity" });
+    if (
+      image.entity_type !== entityType ||
+      image.entity_id !== entityId
+    ) {
+      return res.status(400).json({
+        message: "Image does not belong to the entity",
+      });
     }
 
-    // 👇 لو دي cover: نشيل cover من كل صور نفس الـ entity
-    if (is_cover === true) {
+    // =========================
+    // COVER LOGIC
+    // =========================
+    if (is_cover === true || is_cover === "true") {
       await prisma.Images.updateMany({
         where: {
           entity_type: entityType,
@@ -151,14 +201,25 @@ exports.updateImage = async (req, res) => {
     await prisma.Images.update({
       where: { id: imageId },
       data: {
-        is_cover: is_cover !== undefined ? is_cover : image.is_cover,
-        order: order !== undefined ? order : image.order,
+        is_cover:
+          is_cover !== undefined
+            ? is_cover === true || is_cover === "true"
+            : image.is_cover,
+
+        order:
+          order !== undefined ? Number(order) : image.order,
       },
     });
 
-    res.status(200).json({ message: "Image updated successfully" });
+    return res
+      .status(200)
+      .json({ message: "Image updated successfully" });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: "Server Error", error: err.message });
+
+    return res.status(500).json({
+      message: "Server Error",
+      error: err.message,
+    });
   }
 };

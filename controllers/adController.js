@@ -8,15 +8,7 @@ const { getCache, setCache, deleteCachePattern } = require("../utils/redis");
 const { validateAdDates } = require("../utils/validation");
 
 const adIncludeRelations = {
-  admin: {
-    select: {
-      id: true,
-      full_name: true,
-      email: true,
-      phone: true,
-    },
-  },
-  subuser: {
+  user: {
     select: {
       id: true,
       full_name: true,
@@ -26,22 +18,34 @@ const adIncludeRelations = {
       facebook_link: true,
     },
   },
-  Categories: true,
-  SubCategories: true,
+
+  admin: {
+    select: {
+      id: true,
+      full_name: true,
+      email: true,
+    },
+  },
+
+  category: true,
+  subCategory: true,
+
   country: true,
   governorate: true,
   city: true,
   area: true,
   compound: true,
-  Booking: true,
+
+  bookings: true,
 };
 const adIncludeListRelations = {
   city: true,
   governorate: true,
   area: true,
   compound: true,
-  Categories: true,
-  SubCategories: true,
+
+  category: true,
+  subCategory: true,
 };
 function formatListAd(ad) {
   const firstImage =
@@ -60,8 +64,8 @@ function formatListAd(ad) {
     governorate: ad.governorate,
     area: ad.area,
     compound: ad.compound,
-    Categories: ad.Categories,
-    SubCategories: ad.SubCategories,
+    category: ad.category,
+    subCategory: ad.subCategory,
     views_count: ad.views_count,
     reach_count: ad.reach_count,
     favorites_count: ad.favorites_count,
@@ -99,39 +103,88 @@ function formatDetailAd(ad) {
 }
 async function enrichAds(ads, userId = null, mode = "list") {
   if (!ads) return null;
-  if (!Array.isArray(ads)) ads = [ads];
 
-  const adIds = ads.map((a) => a.id);
+  if (!Array.isArray(ads)) {
+    ads = [ads];
+  }
 
-  const [images, favorites] = await Promise.all([
-    prisma.Images.findMany({
-      where: { entity_type: "AD", entity_id: { in: adIds } },
-    }),
-    userId
-      ? prisma.AdFavorite.findMany({
-          where: { user_id: userId, ad_id: { in: adIds } },
-        })
-      : [],
-  ]);
+  const groupedByTable = {};
 
-  // 🔥 نحول الصور لـ map مرة واحدة
+  for (const ad of ads) {
+    if (!groupedByTable[ad.table_id]) {
+      groupedByTable[ad.table_id] = [];
+    }
+
+    groupedByTable[ad.table_id].push(ad.id);
+  }
+
+  let images = [];
+  let favorites = [];
+
+  for (const table_id in groupedByTable) {
+    const ids = groupedByTable[table_id];
+
+    const tableImages = await prisma.Images.findMany({
+      where: {
+        table_id: Number(table_id),
+        entity_id: {
+          in: ids,
+        },
+      },
+    });
+
+    images.push(...tableImages);
+
+    if (userId) {
+      const tableFavorites = await prisma.AdFavorite.findMany({
+        where: {
+          user_id: userId,
+          table_id: Number(table_id),
+          entity_id: {
+            in: ids,
+          },
+        },
+      });
+
+      favorites.push(...tableFavorites);
+    }
+  }
+
+  // =========================
+  // IMAGE MAP
+  // =========================
   const imageMap = images.reduce((acc, img) => {
-    if (!acc[img.entity_id]) acc[img.entity_id] = [];
-    acc[img.entity_id].push(img);
+    const key = `${img.table_id}_${img.entity_id}`;
+
+    if (!acc[key]) {
+      acc[key] = [];
+    }
+
+    acc[key].push(img);
+
     return acc;
   }, {});
 
-  // 🔥 نحول favorites لـ Set (سريع جداً)
-  const favoriteSet = new Set(favorites.map((f) => Number(f.ad_id)));
+  // =========================
+  // FAVORITES SET
+  // =========================
+  const favoriteSet = new Set(
+    favorites.map((f) => `${f.table_id}_${f.entity_id}`),
+  );
 
+  // =========================
+  // BUILD RESPONSE
+  // =========================
   return ads.map((ad) => {
-    const adImages = imageMap[ad.id] || [];
+    const key = `${ad.table_id}_${ad.id}`;
 
-    const isFav = favoriteSet.has(Number(ad.id));
+    const adImages = imageMap[key] || [];
+
+    const isFav = favoriteSet.has(key);
 
     const formatted =
       mode === "detail"
-        ? formatDetailAd(ad)
+        ? formatDetailAd({ ...ad, images: adImages })
         : formatListAd({ ...ad, images: adImages });
 
     return {
@@ -143,7 +196,6 @@ async function enrichAds(ads, userId = null, mode = "list") {
 }
 const validateCreateAd = require("../utils/ads/validators/validateCreateAd");
 const getModel = require("../utils/ads/services/getModel");
-const tableRegistry = require("../utils/ads/config/tableRegistry");
 const validateUpdateAd = require("../utils/ads/validators/validateUpdateAd");
 
 exports.createAd = async (req, res) => {
@@ -195,9 +247,8 @@ exports.createAd = async (req, res) => {
       ...data,
 
       table_id,
-
-      user_id: user.id,
-
+      user_id: isAdmin ? null : user.id,
+      admin_id: isAdmin ? user.id : null,
       status,
 
       status_changed_at: isAdmin ? new Date() : null,
@@ -400,6 +451,7 @@ exports.deleteAd = async (req, res) => {
     const images = await prisma.Images.findMany({
       where: {
         entity_type: "AD",
+        table_id,
         entity_id: adId,
       },
     });
@@ -525,7 +577,11 @@ exports.changeAdStatus = async (req, res) => {
       where: { id: adId },
       data: {
         status,
-        ...(reject_reason && { reject_reason }),
+        status_changed_at: new Date(),
+
+        ...(reject_reason && {
+          reject_reason,
+        }),
       },
     });
 
@@ -535,8 +591,6 @@ exports.changeAdStatus = async (req, res) => {
       data: updatedAd,
     });
   } catch (err) {
-    console.log(err);
-
     return res.status(500).json({
       message: "Server Error",
       error: err.message,
@@ -586,7 +640,7 @@ exports.assignAdmin = async (req, res) => {
         });
       }
 
-      const adminUser = await prisma.users.findUnique({
+      const adminUser = await prisma.Users.findUnique({
         where: { id: admin_id },
       });
 
@@ -695,40 +749,8 @@ exports.getAd = async (req, res) => {
     if (!ad) return res.status(404).json({ message: "Not found" });
 
     const userId = req.user?.id || null;
-    const [adminActiveAdsCount, subuserActiveAdsCount] = await Promise.all([
-      ad.admin?.id
-        ? prisma.D_Vacation_Rent.count({
-            where: {
-              admin_id: ad.admin.id,
-              status: "ACTIVE",
-            },
-          })
-        : null,
-      ad.subuser?.id
-        ? prisma.D_Vacation_Rent.count({
-            where: {
-              subuser_id: ad.subuser.id,
-              status: "ACTIVE",
-            },
-          })
-        : null,
-    ]);
 
     const enriched = await enrichAds(ad, userId, "detail");
-
-    if (enriched[0]?.admin) {
-      enriched[0].admin = {
-        ...enriched[0].admin,
-        active_ads_count: adminActiveAdsCount || 0,
-      };
-    }
-
-    if (enriched[0]?.subuser) {
-      enriched[0].subuser = {
-        ...enriched[0].subuser,
-        active_ads_count: subuserActiveAdsCount || 0,
-      };
-    }
 
     return res.json(enriched[0]);
   } catch (err) {
@@ -754,9 +776,8 @@ exports.getUserAds = async (req, res) => {
     }
 
     const where = {
-      OR: [{ admin_id: Number(userId) }, { subuser_id: Number(userId) }],
+      OR: [{ user_id: Number(userId) }, { admin_id: Number(userId) }],
     };
-
     const [ads, total] = await Promise.all([
       prisma.D_Vacation_Rent.findMany({
         where,
@@ -834,69 +855,68 @@ exports.getSectionsAds = async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 };
-exports.getFavorites = async (req, res) => {
-  try {
-    const userId = req.user.id;
-    const { page, limit, skip } = pagination(req.query);
-
-    const [fav, total] = await Promise.all([
-      prisma.AdFavorite.findMany({
-        where: { user_id: userId },
-        skip,
-        take: limit,
-        include: { ad: { include: adIncludeListRelations } },
-      }),
-      prisma.AdFavorite.count({ where: { user_id: userId } }),
-    ]);
-
-    const ads = fav.map((f) => f.ad);
-
-    const data = await enrichAds(ads, userId, "list");
-
-    res.json({
-      data,
-      pagination: {
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
-      },
-    });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-};
 exports.toggleFavorite = async (req, res) => {
   try {
     const userId = req.user.id;
-    const adId = Number(req.params.adId);
 
-    // 🔹 تأكد إن الإعلان موجود
-    const ad = await prisma.D_Vacation_Rent.findUnique({
-      where: { id: adId },
+    const entity_id = Number(req.params.entity_id);
+    const table_id = Number(req.params.table_id);
+
+    // =========================
+    // TABLE
+    // =========================
+    const prismaModel = getModel(table_id);
+
+    if (!prismaModel) {
+      return res.status(400).json({
+        message: `Model ${table.model} not found`,
+      });
+    }
+
+    // =========================
+    // CHECK AD EXISTS
+    // =========================
+    const ad = await prismaModel.findUnique({
+      where: { id: entity_id },
     });
 
     if (!ad) {
-      return res.status(404).json({ message: "Ad not found" });
+      return res.status(404).json({
+        message: "Ad not found",
+      });
     }
 
-    // 🔹 هل المستخدم عامل favorite قبل كده؟
+    // =========================
+    // CHECK EXISTING FAVORITE
+    // =========================
     const existing = await prisma.AdFavorite.findUnique({
       where: {
-        ad_id_user_id: { ad_id: adId, user_id: userId },
+        entity_id_table_id_user_id: {
+          entity_id,
+          table_id,
+          user_id: userId,
+        },
       },
     });
 
-    // 🔹 toggle logic + transaction
+    // =========================
+    // TOGGLE
+    // =========================
     if (existing) {
       await prisma.$transaction([
         prisma.AdFavorite.delete({
           where: {
-            ad_id_user_id: { ad_id: adId, user_id: userId },
+            entity_id_table_id_user_id: {
+              entity_id,
+              table_id,
+              user_id: userId,
+            },
           },
         }),
-        prisma.D_Vacation_Rent.update({
-          where: { id: adId },
+
+        prismaModel.update({
+          where: { id: entity_id },
+
           data: {
             favorites_count: {
               decrement: 1,
@@ -908,12 +928,15 @@ exports.toggleFavorite = async (req, res) => {
       await prisma.$transaction([
         prisma.AdFavorite.create({
           data: {
-            ad_id: adId,
+            entity_id,
+            table_id,
             user_id: userId,
           },
         }),
-        prisma.D_Vacation_Rent.update({
-          where: { id: adId },
+
+        prismaModel.update({
+          where: { id: entity_id },
+
           data: {
             favorites_count: {
               increment: 1,
@@ -923,18 +946,98 @@ exports.toggleFavorite = async (req, res) => {
       ]);
     }
 
-    // 🔹 cache invalidation
+    // =========================
+    // CACHE
+    // =========================
     await deleteCachePattern("ads:list:*");
     await deleteCachePattern("sections:*");
     await deleteCachePattern(`userAds:${userId}:*`);
     await deleteCachePattern(`favorites:${userId}:*`);
 
-    // 🔹 response
+    // =========================
+    // RESPONSE
+    // =========================
     return res.json({
+      success: true,
+
       message: existing ? "Removed from favorites" : "Added to favorites",
     });
   } catch (err) {
     console.error(err);
-    return res.status(500).json({ message: "Server error" });
+
+    return res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};
+
+exports.getFavorites = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const favorites = await prisma.AdFavorite.findMany({
+      where: {
+        user_id: userId,
+      },
+
+      orderBy: {
+        created_at: "desc",
+      },
+    });
+
+    const grouped = {};
+
+    // =========================
+    // GROUP BY TABLE
+    // =========================
+    for (const fav of favorites) {
+      if (!grouped[fav.table_id]) {
+        grouped[fav.table_id] = [];
+      }
+
+      grouped[fav.table_id].push(fav.entity_id);
+    }
+
+    let ads = [];
+
+    // =========================
+    // FETCH ADS
+    // =========================
+    for (const table_id in grouped) {
+      const prismaModel = getModel(table_id);
+
+      if (!prismaModel) continue;
+
+      const records = await prismaModel.findMany({
+        where: {
+          id: {
+            in: grouped[table_id],
+          },
+        },
+
+        include: adIncludeListRelations,
+      });
+
+      ads.push(...records);
+    }
+
+    // =========================
+    // ENRICH
+    // =========================
+    const data = await enrichAds(ads, userId, "list");
+
+    return res.json({
+      success: true,
+      total: data.length,
+      data,
+    });
+  } catch (err) {
+    console.error(err);
+
+    return res.status(500).json({
+      success: false,
+      message: err.message,
+    });
   }
 };

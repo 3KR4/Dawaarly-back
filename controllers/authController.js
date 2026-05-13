@@ -325,7 +325,7 @@ exports.refreshToken = async (req, res) => {
     }
 
     // ================= CHECK EXPIRATION =================
-    if (validToken.expiresAt < new Date()) {
+    if (validToken.expires_at < new Date()) {
       await prisma.RefreshToken.delete({
         where: {
           id: validToken.id,

@@ -67,9 +67,15 @@ model Users {
 
   bookings Booking[]
 
-  vacation_rent_ads D_Vacation_Rent[] @relation("VacationCreatedBy")
-  vacation_sale_ads D_Vacation_Sale[] @relation("VacationSaleCreatedBy")
-  adReaches         AdReach[]
+  owned_vacation_rent_ads D_Vacation_Rent[] @relation("VacationRentOwner")
+
+  managed_vacation_rent_ads D_Vacation_Rent[] @relation("VacationRentAdmin")
+
+  owned_vacation_sale_ads D_Vacation_Sale[] @relation("VacationSaleOwner")
+
+  managed_vacation_sale_ads D_Vacation_Sale[] @relation("VacationSaleAdmin")
+
+  adReaches AdReach[]
 
   @@index([country_id])
   @@index([governorate_id])
@@ -104,7 +110,6 @@ model AllTables {
 
   categories Categories[]
 
-  images          Images[]
   favorites       AdFavorite[]
   bookings        Booking[]
   reaches         AdReach[]
@@ -322,12 +327,15 @@ model D_Vacation_Rent {
 
   status_changed_at DateTime?
 
-  user_id Int?
+  user_id  Int?
+  admin_id Int?
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
-  user Users? @relation("VacationCreatedBy", fields: [user_id], references: [id])
+  user Users? @relation("VacationRentOwner", fields: [user_id], references: [id])
+
+  admin Users? @relation("VacationRentAdmin", fields: [admin_id], references: [id])
 
   country Countries @relation(fields: [country_id], references: [id])
 
@@ -438,12 +446,15 @@ model D_Vacation_Sale {
 
   status_changed_at DateTime?
 
-  user_id Int?
+  user_id  Int?
+  admin_id Int?
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
-  user Users? @relation("VacationSaleCreatedBy", fields: [user_id], references: [id])
+  user Users? @relation("VacationSaleOwner", fields: [user_id], references: [id])
+
+  admin Users? @relation("VacationSaleAdmin", fields: [admin_id], references: [id])
 
   country Countries @relation(fields: [country_id], references: [id])
 
@@ -479,10 +490,10 @@ model D_Vacation_Sale {
 }
 
 model Images {
-  id Int @id @default(autoincrement())
-  entity_type String
-  entity_id Int
-  table_id  Int
+  id          Int             @id @default(autoincrement())
+  entity_type ImageEntityType
+  entity_id   Int
+  table_id    Int?
 
   public_id  String
   secure_url String
@@ -492,8 +503,6 @@ model Images {
   order Int?
 
   created_at DateTime @default(now())
-
-  table AllTables @relation(fields: [table_id], references: [id], onDelete: Cascade)
 
   @@index([entity_id, table_id])
   @@index([table_id])
@@ -704,4 +713,10 @@ enum BookingStatus {
   CLIENT_ARRIVED
   CLIENT_LEFT
   CANCELLED
+}
+
+enum ImageEntityType {
+  AD
+  SLIDER
+  BLOG
 }

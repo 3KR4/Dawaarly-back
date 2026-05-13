@@ -33,8 +33,8 @@ router.patch(
   updateAd,
 );
 router.delete("/delete/:table_id/:adId", authenticate, deleteAd);
-router.patch("/update/:adId/status", authenticate, changeAdStatus);
-router.patch("/assign-admin/:adId", authenticate, assignAdmin);
+router.patch("/update/:table_id/:adId/status", authenticate, changeAdStatus);
+router.patch("/assign-admin/:table_id/:adId", authenticate, assignAdmin);
 
 router.get("/all", optionalAuth, getAllAds);
 router.get("/sections", optionalAuth, getSectionsAds);
