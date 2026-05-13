@@ -1,6 +1,6 @@
 const { PrismaClient } = require("@prisma/client");
 
-const db = new PrismaClient();
+const prisma = new PrismaClient();
 const cloudinary = require("../utils/cloudinary");
 const buildAdsWhere = require("../utils/buildAdsWhere");
 const { pagination } = require("../utils/pagination");
@@ -143,10 +143,20 @@ async function enrichAds(ads, userId = null, mode = "list") {
 }
 const validateCreateAd = require("../utils/ads/validators/validateCreateAd");
 const getModel = require("../utils/ads/services/getModel");
+const tableRegistry = require("../utils/ads/config/tableRegistry");
+const validateUpdateAd = require("../utils/ads/validators/validateUpdateAd");
 
 exports.createAd = async (req, res) => {
   try {
     const data = req.body;
+
+    // =========================
+    // TABLE ID
+    // =========================
+    const table_id = Number(req.params.table_id);
+
+    // inject table_id
+    data.table_id = table_id;
 
     // =========================
     // VALIDATION
@@ -157,16 +167,11 @@ exports.createAd = async (req, res) => {
       return res.status(400).json(validation);
     }
 
-    const { table } = validation;
+    const prismaModel = getModel(table_id);
 
-    // =========================
-    // DYNAMIC MODEL
-    // =========================
-    const model = table.model;
-
-    if (!prisma[model]) {
+    if (!prismaModel) {
       return res.status(400).json({
-        message: `Model ${model} not found`,
+        message: `Model ${prismaModel} not found`,
       });
     }
 
@@ -189,7 +194,7 @@ exports.createAd = async (req, res) => {
     const createData = {
       ...data,
 
-      table_id: Number(data.table_id),
+      table_id,
 
       user_id: user.id,
 
@@ -212,7 +217,7 @@ exports.createAd = async (req, res) => {
     // =========================
     // CREATE AD
     // =========================
-    const ad = await prisma[model].create({
+    const ad = await prismaModel.create({
       data: createData,
     });
 
@@ -224,8 +229,7 @@ exports.createAd = async (req, res) => {
       message: "Ad created successfully",
       data: {
         id: ad.id,
-        table_id: Number(data.table_id),
-        model,
+        table_id,
         status: ad.status,
       },
     });
@@ -238,129 +242,161 @@ exports.createAd = async (req, res) => {
     });
   }
 };
-const buildUpdateData = (body) => {
-  const fields = [
-    "title",
-    "description",
-    "categoryId",
-    "subCategoryId",
-    "display_phone",
-    "display_whatsapp",
-    "Owner_No1",
-    "Owner_No2",
-    "delivery_no1 ",
-    "delivery_no1",
-    "payment_no1",
-    "payment_no2",
-    "price",
-    "currency",
-    "rent_frequency",
-    "deposit_amount",
-    "min_rent_period",
-    "min_rent_period_unit",
-    "country_id",
-    "governorate_id",
-    "city_id",
-    "area_id",
-    "compound_id",
-    "bedrooms",
-    "bathrooms",
-    "level",
-    "adult_no_max",
-    "child_no_max",
-    "am_seeview",
-    "am_pool",
-    "am_balcony",
-    "am_private_garden",
-    "am_kitchen",
-    "am_ac",
-    "am_heating",
-    "am_elevator",
-    "am_gym",
-    "tags",
-  ];
-
-  const data = {};
-
-  fields.forEach((f) => {
-    if (body[f] !== undefined) {
-      data[f] = body[f];
-    }
-  });
-
-  if (body.available_from) data.available_from = new Date(body.available_from);
-
-  if (body.available_to) data.available_to = new Date(body.available_to);
-
-  return data;
-};
 exports.updateAd = async (req, res) => {
   try {
     const adId = Number(req.params.adId);
+    const table_id = Number(req.params.table_id);
 
-    const ad = await prisma.D_Vacation_Rent.findUnique({
+    const prismaModel = getModel(table_id);
+
+    if (!prismaModel) {
+      return res.status(400).json({
+        message: `Model ${table.model} not found`,
+      });
+    }
+
+    // =========================
+    // GET AD
+    // =========================
+
+    const ad = await prismaModel.findUnique({
       where: { id: adId },
     });
 
     if (!ad) {
-      return res.status(404).json({ message: "Ad not found" });
+      return res.status(404).json({
+        message: `Ad ${adId} not found`,
+      });
     }
 
+    // =========================
+    // AUTH
+    // =========================
     const user = req.user;
 
     const isAdmin =
       user?.permissions?.includes("EDIT_AD") || user?.is_super_admin;
 
-    const isOwner = ad.admin_id === user.id || ad.subuser_id === user.id;
+    const isOwner = ad.user_id === user.id;
 
     if (!isAdmin && !isOwner) {
-      return res.status(403).json({ message: "Access denied" });
+      return res.status(403).json({
+        message: "Access denied",
+      });
     }
 
-    const dataToUpdate = buildUpdateData(req.body);
+    // =========================
+    // VALIDATION
+    // =========================
+    const validation = validateUpdateAd(req.body, table_id);
 
+    if (validation.error) {
+      return res.status(400).json(validation);
+    }
+
+    // =========================
+    // BUILD UPDATE DATA
+    // =========================
+    const dataToUpdate = {
+      ...req.body,
+    };
+
+    // date casting
+    if (req.body.available_from) {
+      dataToUpdate.available_from = new Date(req.body.available_from);
+    }
+
+    if (req.body.available_to) {
+      dataToUpdate.available_to = new Date(req.body.available_to);
+    }
+
+    // pending after edit
     if (!isAdmin && ad.status === "ACTIVE") {
       dataToUpdate.status = "PENDING";
       dataToUpdate.was_previously_approved = true;
     }
 
-    const updatedAd = await prisma.D_Vacation_Rent.update({
+    // prevent changing protected fields
+    delete dataToUpdate.id;
+    delete dataToUpdate.user_id;
+
+    // =========================
+    // UPDATE
+    // =========================
+    const updatedAd = await prismaModel.update({
       where: { id: adId },
       data: dataToUpdate,
     });
+
+    // =========================
+    // CACHE
+    // =========================
     await deleteCachePattern("ads:list:*");
     await deleteCachePattern("userAds:*");
     await deleteCachePattern("sections:*");
-    res.json({
+
+    // =========================
+    // RESPONSE
+    // =========================
+    return res.json({
+      success: true,
       message: "Ad updated successfully",
-      ad: updatedAd,
+      data: updatedAd,
     });
   } catch (err) {
-    res.status(500).json({
-      message: "Server Error",
-      error: err.message,
+    console.log(err);
+
+    return res.status(500).json({
+      success: false,
+      message: err.message,
     });
   }
 };
 exports.deleteAd = async (req, res) => {
   try {
     const adId = Number(req.params.adId);
+    const table_id = Number(req.params.table_id);
 
-    const ad = await prisma.D_Vacation_Rent.findUnique({
+    const prismaModel = getModel(table_id);
+
+    if (!prismaModel) {
+      return res.status(400).json({
+        message: `Model ${table.model} not found`,
+      });
+    }
+
+    // =========================
+    // FIND AD
+    // =========================
+    const ad = await prismaModel.findUnique({
       where: { id: adId },
     });
 
-    if (!ad) return res.status(404).json({ message: "Ad not found" });
+    if (!ad) {
+      return res.status(404).json({
+        message: "Ad not found",
+      });
+    }
 
-    const isOwner =
-      ad.admin_id === req.user.id || ad.subuser_id === req.user.id;
+    // =========================
+    // AUTH
+    // =========================
+    const user = req.user;
+
+    const isOwner = ad.user_id === user.id;
 
     const canDelete =
-      req.user.is_super_admin || req.user.permissions?.includes("DELETE_AD");
+      user?.is_super_admin || user?.permissions?.includes("DELETE_AD");
 
-    if (!isOwner && !canDelete)
-      return res.status(403).json({ message: "Access denied" });
+    if (!isOwner && !canDelete) {
+      return res.status(403).json({
+        message: "Access denied",
+      });
+    }
 
+    // =========================
+    // IMAGES
+    // =========================
     const images = await prisma.Images.findMany({
       where: {
         entity_type: "AD",
@@ -372,49 +408,87 @@ exports.deleteAd = async (req, res) => {
       images.map((img) => cloudinary.uploader.destroy(img.public_id)),
     );
 
-    await prisma.D_Vacation_Rent.delete({
+    // =========================
+    // DELETE
+    // =========================
+    await prismaModel.delete({
       where: { id: adId },
     });
+
+    // =========================
+    // CACHE
+    // =========================
     await deleteCachePattern("ads:list:*");
     await deleteCachePattern("userAds:*");
     await deleteCachePattern("sections:*");
-    res.json({ message: "Ad deleted successfully" });
+
+    // =========================
+    // RESPONSE
+    // =========================
+    return res.json({
+      success: true,
+      message: "Ad deleted successfully",
+    });
   } catch (err) {
     console.log(err);
 
-    res.status(500).json({ message: "Server Error" });
+    return res.status(500).json({
+      success: false,
+      message: err.message,
+    });
   }
 };
 exports.changeAdStatus = async (req, res) => {
   try {
-    const { adId } = req.params;
+    const table_id = Number(req.params.table_id);
+    const adId = Number(req.params.adId);
+
     const { status, reason } = req.body;
 
-    // 🔹 نجيب الإعلان من قاعدة البيانات
-    const ad = await prisma.D_Vacation_Rent.findUnique({
-      where: { id: Number(adId) },
+    const prismaModel = getModel(table_id);
+
+    if (!prismaModel) {
+      return res.status(400).json({
+        message: `Model ${table.model} not found`,
+      });
+    }
+
+    // =========================
+    // GET AD
+    // =========================
+    const ad = await prismaModel.findUnique({
+      where: { id: adId },
     });
 
-    if (!ad) return res.status(404).json({ message: "Ad not found" });
+    if (!ad) {
+      return res.status(404).json({ message: "Ad not found" });
+    }
 
-    // 🔹 صلاحيات المستخدم
+    // =========================
+    // AUTH
+    // =========================
     const isAdmin =
       req.user?.is_super_admin ||
       req.user?.permissions?.includes("CHANGE_ADS_STATUS");
 
-    const isOwner =
-      ad.admin_id === req.user.id || ad.subuser_id === req.user.id;
+    const isOwner = ad.user_id === req.user.id;
 
-    // 🔹 الحالات المسموحة
+    // =========================
+    // VALID STATUS
+    // =========================
     const allowedStatuses = ["ACTIVE", "REJECTED", "DISABLED"];
 
     if (!allowedStatuses.includes(status)) {
       return res.status(400).json({ message: "Invalid status" });
     }
 
-    // 🔹 التحقق من الصلاحيات
+    // =========================
+    // AUTH RULES
+    // =========================
     if (!isAdmin) {
-      if (!isOwner) return res.status(403).json({ message: "Access denied" });
+      if (!isOwner) {
+        return res.status(403).json({ message: "Access denied" });
+      }
 
       if (status !== "DISABLED") {
         return res.status(403).json({
@@ -423,45 +497,62 @@ exports.changeAdStatus = async (req, res) => {
       }
     }
 
-    // 🔹 إذا الحالة REJECTED نحتاج السبب
+    // =========================
+    // REJECT LOGIC
+    // =========================
     let reject_reason;
+
     if (status === "REJECTED") {
-      if (!isAdmin)
+      if (!isAdmin) {
         return res.status(403).json({
           message: "Only admin can reject ads",
         });
+      }
 
-      if (!reason)
+      if (!reason) {
         return res.status(400).json({
           message: "Reason required for rejection",
         });
+      }
 
       reject_reason = reason;
     }
 
-    // 🔹 تحديث الإعلان
-    const updatedAd = await prisma.D_Vacation_Rent.update({
-      where: { id: Number(adId) },
+    // =========================
+    // UPDATE
+    // =========================
+    const updatedAd = await prismaModel.update({
+      where: { id: adId },
       data: {
         status,
-        ...(reject_reason && { reject_reason }), // فقط لو REJECTED
+        ...(reject_reason && { reject_reason }),
       },
     });
 
-    res.json({
+    return res.json({
+      success: true,
       message: `Ad status updated to ${status}`,
-      ad: updatedAd,
+      data: updatedAd,
     });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server Error" });
+    console.log(err);
+
+    return res.status(500).json({
+      message: "Server Error",
+      error: err.message,
+    });
   }
 };
 exports.assignAdmin = async (req, res) => {
   try {
-    // 🔐 التحقق من الصلاحية أول حاجة
+    const table_id = Number(req.params.table_id);
+    const adId = Number(req.params.adId);
+
     const user = req.user;
 
+    // =========================
+    // AUTH
+    // =========================
     if (
       !user?.is_super_admin &&
       !user?.permissions?.includes("ASSIGN_RESPONSIBILITY")
@@ -471,20 +562,28 @@ exports.assignAdmin = async (req, res) => {
       });
     }
 
-    const adId = Number(req.params.adId);
-    const { admin_id } = req.body;
+    const prismaModel = getModel(table_id);
 
-    // ✅ 1. نسمح بـ null عادي
-    if (admin_id === undefined) {
-      return res.status(400).json({ message: "admin_id field is required" });
+    if (!prismaModel) {
+      return res.status(400).json({
+        message: `Model ${table.model} not found`,
+      });
     }
 
-    // ✅ 2. لو مش null، نتأكد إنه رقم صحيح والأدمن موجود
+    const { admin_id } = req.body;
+
+    if (admin_id === undefined) {
+      return res.status(400).json({ message: "admin_id is required" });
+    }
+
+    // =========================
+    // VALIDATE ADMIN
+    // =========================
     if (admin_id !== null) {
       if (isNaN(admin_id)) {
-        return res
-          .status(400)
-          .json({ message: "admin_id must be a number or null" });
+        return res.status(400).json({
+          message: "admin_id must be number or null",
+        });
       }
 
       const adminUser = await prisma.users.findUnique({
@@ -496,29 +595,41 @@ exports.assignAdmin = async (req, res) => {
       }
     }
 
-    // 3. التحقق من وجود الإعلان
-    const ad = await prisma.D_Vacation_Rent.findUnique({
+    // =========================
+    // GET AD
+    // =========================
+    const ad = await prismaModel.findUnique({
       where: { id: adId },
     });
 
-    if (!ad) return res.status(404).json({ message: "Ad not found" });
+    if (!ad) {
+      return res.status(404).json({ message: "Ad not found" });
+    }
 
-    await prisma.D_Vacation_Rent.update({
+    // =========================
+    // UPDATE
+    // =========================
+    await prismaModel.update({
       where: { id: adId },
       data: {
         admin_id,
       },
     });
 
-    res.json({
+    return res.json({
+      success: true,
       message:
         admin_id === null
           ? "Admin removed successfully"
           : "Admin assigned successfully",
     });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server Error" });
+    console.log(err);
+
+    return res.status(500).json({
+      message: "Server Error",
+      error: err.message,
+    });
   }
 };
 exports.getAllAds = async (req, res) => {

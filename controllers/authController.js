@@ -269,8 +269,8 @@ exports.login = [
       await prisma.RefreshToken.create({
         data: {
           token: refreshToken,
-          userId: user.id,
-          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+          user_id: user.id,
+          expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
         },
       });
 
@@ -427,8 +427,8 @@ exports.verifyEmail = [
     await prisma.RefreshToken.create({
       data: {
         token: hashedToken,
-        userId: updatedUser.id,
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        user_id: updatedUser.id,
+        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
       },
     });
 

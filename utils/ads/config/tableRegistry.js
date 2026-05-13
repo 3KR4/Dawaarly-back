@@ -1,6 +1,6 @@
 module.exports = {
   1: { model: "D_Vacation_Sale", type: "sale" },
-  2: { model: "D_Vacation", type: "rent" },
+  2: { model: "D_Vacation_Rent", type: "rent" },
   3: { model: "D_Apartment_Sale", type: "sale" },
   4: { model: "D_Apartment_Rent", type: "rent" },
   5: { model: "D_Vila_Sale", type: "sale" },

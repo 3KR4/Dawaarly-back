@@ -5,26 +5,21 @@ const tableRules = require("../config/tableRules");
 module.exports = (data) => {
   const table_id = Number(data.table_id);
 
-  // 1. check table exists
-  const table = tableRegistry[table_id];
-  if (!table) {
-    return {
-      error: "Invalid table_id",
-    };
-  }
 
-  // 2. base required fields
-  let missing = baseRequired(data);
 
-  // 3. dynamic fields from tableConfig
-  const extraFields = tableConfig[table_id] || [];
-
-  const missingExtra = extraFields.filter(
+  // 2. global required fields
+  const globalMissing = globalRules.required.filter(
     (f) => data[f] === undefined || data[f] === null,
   );
 
-  // 4. merge
-  missing = [...missing, ...missingExtra];
+  // 3. table specific required fields
+  const tableRequired = tableRules[table_id]?.required || [];
+  const tableMissing = tableRequired.filter(
+    (f) => data[f] === undefined || data[f] === null,
+  );
+
+  // 4. merge missing
+  const missing = [...globalMissing, ...tableMissing];
 
   if (missing.length) {
     return {
@@ -33,8 +28,20 @@ module.exports = (data) => {
     };
   }
 
+  // 5. optional: validate allowed fields existence (not required)
+  const allowedFields = tableRules[table_id]?.allowed || [];
+
+  const invalidFields = Object.keys(data).filter((key) => {
+    const isGlobal =
+      globalRules.required.includes(key) || globalRules.optional.includes(key);
+    const isTableAllowed = allowedFields.includes(key);
+    const isSystemField = key === "table_id";
+
+    return !isGlobal && !isTableAllowed && !isSystemField;
+  });
+
   return {
     error: null,
-    table,
+    invalidFields: invalidFields.length ? invalidFields : undefined,
   };
 };
