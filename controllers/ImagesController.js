@@ -61,7 +61,7 @@ exports.uploadImages = async (req, res) => {
     const entityType = req.params.entity_type; // AD | BLOG | SLIDER
     const entityId = Number(req.params.entity_id);
     const tableId = req.params.table_id
-      ? Number(req.body.table_id)
+      ? Number(req.params.table_id)
       : null;
 
     const isCover = req.body.is_cover === "true";

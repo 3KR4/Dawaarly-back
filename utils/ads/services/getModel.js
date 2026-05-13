@@ -8,5 +8,7 @@ module.exports = (table_id) => {
 
   if (!table?.model) return null;
 
-  return prisma[table.model] || null;
+  const delegateName = table.model[0].toLowerCase() + table.model.slice(1);
+
+  return prisma[delegateName] || null;
 };

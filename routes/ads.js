@@ -39,6 +39,6 @@ router.patch("/assign-admin/:table_id/:adId", authenticate, assignAdmin);
 router.get("/all", optionalAuth, getAllAds);
 router.get("/sections", optionalAuth, getSectionsAds);
 router.get("/profile/:userId", optionalAuth, getUserAds);
-router.get("/:adId", optionalAuth, getAd);
+router.get("/:table_id/:adId", optionalAuth, getAd);
 
 module.exports = router;

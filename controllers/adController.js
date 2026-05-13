@@ -6,6 +6,7 @@ const buildAdsWhere = require("../utils/buildAdsWhere");
 const { pagination } = require("../utils/pagination");
 const { getCache, setCache, deleteCachePattern } = require("../utils/redis");
 const { validateAdDates } = require("../utils/validation");
+const tableRegistry = require("../utils/ads/config/tableRegistry");
 
 const adIncludeRelations = {
   user: {
@@ -35,8 +36,6 @@ const adIncludeRelations = {
   city: true,
   area: true,
   compound: true,
-
-  bookings: true,
 };
 const adIncludeListRelations = {
   city: true,
@@ -124,7 +123,7 @@ async function enrichAds(ads, userId = null, mode = "list") {
   for (const table_id in groupedByTable) {
     const ids = groupedByTable[table_id];
 
-    const tableImages = await prisma.Images.findMany({
+    const tableImages = await prisma.images.findMany({
       where: {
         table_id: Number(table_id),
         entity_id: {
@@ -136,7 +135,7 @@ async function enrichAds(ads, userId = null, mode = "list") {
     images.push(...tableImages);
 
     if (userId) {
-      const tableFavorites = await prisma.AdFavorite.findMany({
+      const tableFavorites = await prisma.adFavorite.findMany({
         where: {
           user_id: userId,
           table_id: Number(table_id),
@@ -197,6 +196,53 @@ async function enrichAds(ads, userId = null, mode = "list") {
 const validateCreateAd = require("../utils/ads/validators/validateCreateAd");
 const getModel = require("../utils/ads/services/getModel");
 const validateUpdateAd = require("../utils/ads/validators/validateUpdateAd");
+
+const getAdsOrderBy = (query) => {
+  const sort = query.sort || query.sort_by;
+  const order = query.order === "asc" ? "asc" : "desc";
+
+  const orderBy = [{ featured_priority: "desc" }];
+
+  if (sort === "top_views" || sort === "views" || sort === "views_desc") {
+    orderBy.push({ views_count: "desc" }, { created_at: "desc" });
+  } else if (sort === "date_asc" || (sort === "date" && order === "asc")) {
+    orderBy.push({ created_at: "asc" });
+  } else {
+    orderBy.push({ created_at: "desc" });
+  }
+
+  return orderBy;
+};
+
+const compareAds = (query) => {
+  const sort = query.sort || query.sort_by;
+  const order = query.order === "asc" ? "asc" : "desc";
+
+  return (a, b) => {
+    const priorityDiff = Number(b.featured_priority || 0) - Number(a.featured_priority || 0);
+    if (priorityDiff !== 0) return priorityDiff;
+
+    if (sort === "top_views" || sort === "views" || sort === "views_desc") {
+      const viewsDiff = Number(b.views_count || 0) - Number(a.views_count || 0);
+      if (viewsDiff !== 0) return viewsDiff;
+    }
+
+    const aDate = new Date(a.created_at).getTime();
+    const bDate = new Date(b.created_at).getTime();
+
+    if (sort === "date_asc" || (sort === "date" && order === "asc")) {
+      return aDate - bDate;
+    }
+
+    return bDate - aDate;
+  };
+};
+
+const getAvailableAdTables = () =>
+  Object.keys(tableRegistry)
+    .map(Number)
+    .map((table_id) => ({ table_id, prismaModel: getModel(table_id) }))
+    .filter((entry) => entry.prismaModel);
 
 exports.createAd = async (req, res) => {
   try {
@@ -692,14 +738,25 @@ exports.getAllAds = async (req, res) => {
 
     const { page, limit, skip } = pagination(req.query);
     const isAdmin = req.user?.is_super_admin || req.user?.user_type === "ADMIN";
+    const table_id = req.query.table_id ? Number(req.query.table_id) : null;
 
-    const where = buildAdsWhere(req.query, isAdmin);
+    if (req.query.table_id && !table_id) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid table_id",
+      });
+    }
+
+    const where = buildAdsWhere(req.query, isAdmin, {
+      includeDynamic: Boolean(table_id),
+    });
+    const orderBy = getAdsOrderBy(req.query);
 
     const crypto = require("crypto");
 
     const hash = crypto
       .createHash("md5")
-      .update(JSON.stringify(where))
+      .update(JSON.stringify({ query: req.query, where, orderBy }))
       .digest("hex");
 
     const cacheKey = `ads:list:${userId || "guest"}:${page}:${limit}:${hash}`;
@@ -707,20 +764,74 @@ exports.getAllAds = async (req, res) => {
     const cached = await getCache(cacheKey);
     if (cached) return res.json(cached);
 
-    const [ads, total] = await Promise.all([
-      prisma.D_Vacation_Rent.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: { created_at: "desc" },
-        include: adIncludeListRelations,
+    if (table_id) {
+      const prismaModel = getModel(table_id);
+
+      if (!prismaModel) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid table_id",
+        });
+      }
+
+      const [ads, total] = await Promise.all([
+        prismaModel.findMany({
+          where,
+          skip,
+          take: limit,
+          orderBy,
+          include: adIncludeListRelations,
+        }),
+        prismaModel.count({ where }),
+      ]);
+
+      const data = await enrichAds(ads, userId, "list");
+
+      const response = {
+        success: true,
+        data,
+        pagination: {
+          total,
+          page,
+          limit,
+          totalPages: Math.ceil(total / limit),
+        },
+      };
+
+      await setCache(cacheKey, response, 60);
+
+      return res.json(response);
+    }
+
+    const tables = getAvailableAdTables();
+    const takePerTable = skip + limit;
+
+    const tableResults = await Promise.all(
+      tables.map(async ({ prismaModel }) => {
+        const [records, count] = await Promise.all([
+          prismaModel.findMany({
+            where,
+            take: takePerTable,
+            orderBy,
+            include: adIncludeListRelations,
+          }),
+          prismaModel.count({ where }),
+        ]);
+
+        return { records, count };
       }),
-      prisma.D_Vacation_Rent.count({ where }),
-    ]);
+    );
+
+    const total = tableResults.reduce((sum, result) => sum + result.count, 0);
+    const ads = tableResults
+      .flatMap((result) => result.records)
+      .sort(compareAds(req.query))
+      .slice(skip, skip + limit);
 
     const data = await enrichAds(ads, userId, "list");
 
     const response = {
+      success: true,
       data,
       pagination: {
         total,
@@ -732,29 +843,49 @@ exports.getAllAds = async (req, res) => {
 
     await setCache(cacheKey, response, 60);
 
-    res.json(response);
+    return res.json(response);
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    return res.status(500).json({ success: false, message: err.message });
   }
 };
 exports.getAd = async (req, res) => {
   try {
+    const table_id = Number(req.params.table_id);
     const adId = Number(req.params.adId);
+    const prismaModel = getModel(table_id);
 
-    const ad = await prisma.D_Vacation_Rent.findUnique({
+    if (!prismaModel) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid table_id",
+      });
+    }
+
+    const ad = await prismaModel.findUnique({
       where: { id: adId },
       include: adIncludeRelations,
     });
 
-    if (!ad) return res.status(404).json({ message: "Not found" });
+    if (!ad) {
+      return res.status(404).json({
+        success: false,
+        message: "Ad not found",
+      });
+    }
 
     const userId = req.user?.id || null;
 
     const enriched = await enrichAds(ad, userId, "detail");
 
-    return res.json(enriched[0]);
+    return res.json({
+      success: true,
+      data: enriched[0],
+    });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    return res.status(500).json({
+      success: false,
+      message: err.message,
+    });
   }
 };
 exports.getUserAds = async (req, res) => {
@@ -789,7 +920,7 @@ exports.getUserAds = async (req, res) => {
       prisma.D_Vacation_Rent.count({ where }),
     ]);
 
-    const data = await enrichAds(ads, req.user?.id, "list");
+    const data = await enrichAds(ads, userId, "list");
 
     const response = {
       data,
@@ -803,9 +934,9 @@ exports.getUserAds = async (req, res) => {
 
     await setCache(cacheKey, response, 60);
 
-    res.json(response);
+    return res.json(response);
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    return res.status(500).json({ message: err.message });
   }
 };
 exports.getSectionsAds = async (req, res) => {

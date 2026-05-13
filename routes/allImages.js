@@ -10,7 +10,7 @@ const multer = require("multer");
 const upload = multer();
 
 router.post(
-  "/:entity_type/:entity_id/:table_id",
+  "/:entity_type/:table_id/:entity_id",
   authenticate,
   upload.array("files"),
   uploadImages,
