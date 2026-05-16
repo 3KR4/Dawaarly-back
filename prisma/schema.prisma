@@ -75,8 +75,34 @@ model Users {
 
   managed_vacation_sale_ads D_Vacation_Sale[] @relation("VacationSaleAdmin")
 
+  owned_apartment_rent_ads   D_Apartment_Rent[] @relation("ApartmentRentOwner")
+  managed_apartment_rent_ads D_Apartment_Rent[] @relation("ApartmentRentAdmin")
+
+  owned_apartment_sale_ads   D_Apartment_Sale[] @relation("ApartmentSaleOwner")
+  managed_apartment_sale_ads D_Apartment_Sale[] @relation("ApartmentSaleAdmin")
+
+  owned_villa_rent_ads   D_Villa_Rent[] @relation("VillaRentOwner")
+  managed_villa_rent_ads D_Villa_Rent[] @relation("VillaRentAdmin")
+
+  owned_villa_sale_ads   D_Villa_Sale[] @relation("VillaSaleOwner")
+  managed_villa_sale_ads D_Villa_Sale[] @relation("VillaSaleAdmin")
+
+  owned_commercial_rent_ads   D_Commercial_Rent[] @relation("CommercialRentOwner")
+  managed_commercial_rent_ads D_Commercial_Rent[] @relation("CommercialRentAdmin")
+
+  owned_commercial_sale_ads   D_Commercial_Sale[] @relation("CommercialSaleOwner")
+  managed_commercial_sale_ads D_Commercial_Sale[] @relation("CommercialSaleAdmin")
+
+  owned_buildings_lands_rent_ads   D_Buildings_And_Lands_Rent[] @relation("BuildingsLandsRentOwner")
+  managed_buildings_lands_rent_ads D_Buildings_And_Lands_Rent[] @relation("BuildingsLandsRentAdmin")
+
+  owned_buildings_lands_sale_ads   D_Buildings_And_Lands_Sale[] @relation("BuildingsLandsSaleOwner")
+  managed_buildings_lands_sale_ads D_Buildings_And_Lands_Sale[] @relation("BuildingsLandsSaleAdmin")
+
   adReaches AdReach[]
 
+  @@index([user_type])
+  @@index([is_super_admin])
   @@index([country_id])
   @@index([governorate_id])
   @@index([city_id])
@@ -115,6 +141,18 @@ model AllTables {
   reaches         AdReach[]
   D_Vacation_Rent D_Vacation_Rent[]
   D_Vacation_Sale D_Vacation_Sale[]
+
+  D_Apartment_Rent D_Apartment_Rent[]
+  D_Apartment_Sale D_Apartment_Sale[]
+
+  D_Villa_Rent D_Villa_Rent[]
+  D_Villa_Sale D_Villa_Sale[]
+
+  D_Commercial_Rent D_Commercial_Rent[]
+  D_Commercial_Sale D_Commercial_Sale[]
+
+  D_Buildings_And_Lands_Rent D_Buildings_And_Lands_Rent[]
+  D_Buildings_And_Lands_Sale D_Buildings_And_Lands_Sale[]
 }
 
 model Categories {
@@ -134,6 +172,18 @@ model Categories {
   vacation_rent_ads D_Vacation_Rent[]
   vacation_sale_ads D_Vacation_Sale[]
 
+  apartment_rent_ads D_Apartment_Rent[]
+  apartment_sale_ads D_Apartment_Sale[]
+
+  villa_rent_ads D_Villa_Rent[]
+  villa_sale_ads D_Villa_Sale[]
+
+  commercial_rent_ads D_Commercial_Rent[]
+  commercial_sale_ads D_Commercial_Sale[]
+
+  buildings_lands_rent_ads D_Buildings_And_Lands_Rent[]
+  buildings_lands_sale_ads D_Buildings_And_Lands_Sale[]
+
   @@index([table_id])
 }
 
@@ -152,6 +202,18 @@ model SubCategories {
   vacation_rent_ads D_Vacation_Rent[]
   vacation_sale_ads D_Vacation_Sale[]
 
+  apartment_rent_ads D_Apartment_Rent[]
+  apartment_sale_ads D_Apartment_Sale[]
+
+  villa_rent_ads D_Villa_Rent[]
+  villa_sale_ads D_Villa_Sale[]
+
+  commercial_rent_ads D_Commercial_Rent[]
+  commercial_sale_ads D_Commercial_Sale[]
+
+  buildings_lands_rent_ads D_Buildings_And_Lands_Rent[]
+  buildings_lands_sale_ads D_Buildings_And_Lands_Sale[]
+
   @@index([category_id])
 }
 
@@ -165,8 +227,19 @@ model Countries {
 
   users Users[]
 
-  vacation_rent_ads D_Vacation_Rent[]
-  vacation_sale_ads D_Vacation_Sale[]
+  vacation_rent_ads  D_Vacation_Rent[]
+  vacation_sale_ads  D_Vacation_Sale[]
+  apartment_rent_ads D_Apartment_Rent[]
+  apartment_sale_ads D_Apartment_Sale[]
+
+  villa_rent_ads D_Villa_Rent[]
+  villa_sale_ads D_Villa_Sale[]
+
+  commercial_rent_ads D_Commercial_Rent[]
+  commercial_sale_ads D_Commercial_Sale[]
+
+  buildings_lands_rent_ads D_Buildings_And_Lands_Rent[]
+  buildings_lands_sale_ads D_Buildings_And_Lands_Sale[]
 }
 
 model Governorates {
@@ -183,8 +256,19 @@ model Governorates {
 
   users Users[]
 
-  vacation_rent_ads D_Vacation_Rent[]
-  vacation_sale_ads D_Vacation_Sale[]
+  vacation_rent_ads  D_Vacation_Rent[]
+  vacation_sale_ads  D_Vacation_Sale[]
+  apartment_rent_ads D_Apartment_Rent[]
+  apartment_sale_ads D_Apartment_Sale[]
+
+  villa_rent_ads D_Villa_Rent[]
+  villa_sale_ads D_Villa_Sale[]
+
+  commercial_rent_ads D_Commercial_Rent[]
+  commercial_sale_ads D_Commercial_Sale[]
+
+  buildings_lands_rent_ads D_Buildings_And_Lands_Rent[]
+  buildings_lands_sale_ads D_Buildings_And_Lands_Sale[]
 
   @@index([country_id])
 }
@@ -205,8 +289,19 @@ model Cities {
 
   users Users[]
 
-  vacation_rent_ads D_Vacation_Rent[]
-  vacation_sale_ads D_Vacation_Sale[]
+  vacation_rent_ads  D_Vacation_Rent[]
+  vacation_sale_ads  D_Vacation_Sale[]
+  apartment_rent_ads D_Apartment_Rent[]
+  apartment_sale_ads D_Apartment_Sale[]
+
+  villa_rent_ads D_Villa_Rent[]
+  villa_sale_ads D_Villa_Sale[]
+
+  commercial_rent_ads D_Commercial_Rent[]
+  commercial_sale_ads D_Commercial_Sale[]
+
+  buildings_lands_rent_ads D_Buildings_And_Lands_Rent[]
+  buildings_lands_sale_ads D_Buildings_And_Lands_Sale[]
 
   @@index([governorate_id])
 }
@@ -223,8 +318,19 @@ model Areas {
 
   compounds Compounds[]
 
-  vacation_rent_ads D_Vacation_Rent[]
-  vacation_sale_ads D_Vacation_Sale[]
+  vacation_rent_ads  D_Vacation_Rent[]
+  vacation_sale_ads  D_Vacation_Sale[]
+  apartment_rent_ads D_Apartment_Rent[]
+  apartment_sale_ads D_Apartment_Sale[]
+
+  villa_rent_ads D_Villa_Rent[]
+  villa_sale_ads D_Villa_Sale[]
+
+  commercial_rent_ads D_Commercial_Rent[]
+  commercial_sale_ads D_Commercial_Sale[]
+
+  buildings_lands_rent_ads D_Buildings_And_Lands_Rent[]
+  buildings_lands_sale_ads D_Buildings_And_Lands_Sale[]
 
   @@index([city_id])
 }
@@ -242,251 +348,22 @@ model Compounds {
 
   area Areas? @relation(fields: [area_id], references: [id], onDelete: Cascade)
 
-  vacation_rent_ads D_Vacation_Rent[]
-  vacation_sale_ads D_Vacation_Sale[]
+  vacation_rent_ads  D_Vacation_Rent[]
+  vacation_sale_ads  D_Vacation_Sale[]
+  apartment_rent_ads D_Apartment_Rent[]
+  apartment_sale_ads D_Apartment_Sale[]
+
+  villa_rent_ads D_Villa_Rent[]
+  villa_sale_ads D_Villa_Sale[]
+
+  commercial_rent_ads D_Commercial_Rent[]
+  commercial_sale_ads D_Commercial_Sale[]
+
+  buildings_lands_rent_ads D_Buildings_And_Lands_Rent[]
+  buildings_lands_sale_ads D_Buildings_And_Lands_Sale[]
 
   @@index([city_id])
   @@index([area_id])
-}
-
-model D_Vacation_Rent {
-  id       Int      @id @default(autoincrement())
-  table_id Int
-  status   AdStatus @default(PENDING)
-
-  featured_priority Int @default(0)
-
-  title       String
-  description String @db.VarChar(1200)
-
-  display_phone            Boolean @default(true)
-  display_whatsapp         Boolean @default(true)
-  display_dawaarly_contact Boolean @default(false)
-
-  owner_no1 String?
-  owner_no2 String?
-
-  delivery_no1 String?
-  delivery_no2 String?
-
-  payment_no1 String?
-  payment_no2 String?
-
-  price Decimal? @db.Decimal(12, 2)
-
-  deposit_amount Decimal? @db.Decimal(12, 2)
-
-  rent_frequency       RentFrequencyAndPeriodUnit?
-  min_rent_period      Int?
-  min_rent_period_unit RentFrequencyAndPeriodUnit?
-
-  available_from DateTime?
-  available_to   DateTime?
-
-  currency Currency @default(EGP)
-
-  country_id     Int
-  governorate_id Int
-  city_id        Int
-
-  area_id     Int?
-  compound_id Int?
-
-  categoryId    Int?
-  subCategoryId Int?
-
-  bedrooms  Int?
-  bathrooms Int?
-
-  area_m2 Int?
-
-  level Int?
-
-  adult_no_max Int?
-  child_no_max Int?
-
-  am_seeview        Boolean @default(false)
-  am_pool           Boolean @default(false)
-  am_balcony        Boolean @default(false)
-  am_private_garden Boolean @default(false)
-  am_kitchen        Boolean @default(false)
-  am_ac             Boolean @default(false)
-  am_heating        Boolean @default(false)
-  am_elevator       Boolean @default(false)
-  am_gym            Boolean @default(false)
-
-  views_count     Int @default(0)
-  reach_count     Int @default(0)
-  favorites_count Int @default(0)
-
-  tags Json?
-
-  was_previously_approved Boolean @default(false)
-
-  reject_reason String?
-
-  status_changed_at DateTime?
-
-  user_id  Int?
-  admin_id Int?
-
-  created_at DateTime @default(now())
-  updated_at DateTime @updatedAt
-
-  user Users? @relation("VacationRentOwner", fields: [user_id], references: [id])
-
-  admin Users? @relation("VacationRentAdmin", fields: [admin_id], references: [id])
-
-  country Countries @relation(fields: [country_id], references: [id])
-
-  governorate Governorates @relation(fields: [governorate_id], references: [id])
-
-  city Cities @relation(fields: [city_id], references: [id])
-
-  area Areas? @relation(fields: [area_id], references: [id])
-
-  compound Compounds? @relation(fields: [compound_id], references: [id])
-
-  category Categories? @relation(fields: [categoryId], references: [id])
-
-  subCategory SubCategories? @relation(fields: [subCategoryId], references: [id])
-
-  table AllTables @relation(fields: [table_id], references: [id])
-
-  @@index([status])
-  @@index([table_id])
-  @@index([featured_priority])
-  @@index([country_id])
-  @@index([governorate_id])
-  @@index([city_id])
-  @@index([area_id])
-  @@index([compound_id])
-  @@index([categoryId])
-  @@index([subCategoryId])
-  @@index([price])
-  @@index([status, created_at])
-  @@index([status, featured_priority])
-  @@index([status, categoryId, price, city_id])
-  @@index([status, subCategoryId, price, city_id])
-}
-
-model D_Vacation_Sale {
-  id       Int      @id @default(autoincrement())
-  table_id Int
-  status   AdStatus @default(PENDING)
-
-  featured_priority Int @default(0)
-
-  title       String
-  description String @db.VarChar(1200)
-
-  display_phone            Boolean @default(true)
-  display_whatsapp         Boolean @default(true)
-  display_dawaarly_contact Boolean @default(false)
-
-  owner_no1 String?
-  owner_no2 String?
-
-  delivery_no1 String?
-  delivery_no2 String?
-
-  payment_no1 String?
-  payment_no2 String?
-
-  price Decimal? @db.Decimal(12, 2)
-
-  payment_method PaymentMethod?
-
-  down_payment Decimal? @db.Decimal(12, 2)
-
-  installment_years Int?
-
-  ready_to_move Boolean @default(false)
-
-  furnished Boolean @default(false)
-
-  currency Currency @default(EGP)
-
-  country_id     Int
-  governorate_id Int
-  city_id        Int
-
-  area_id     Int?
-  compound_id Int?
-
-  categoryId    Int?
-  subCategoryId Int?
-
-  bedrooms  Int?
-  bathrooms Int?
-
-  area_m2 Int?
-
-  level Int?
-
-  am_seeview        Boolean @default(false)
-  am_pool           Boolean @default(false)
-  am_balcony        Boolean @default(false)
-  am_private_garden Boolean @default(false)
-  am_kitchen        Boolean @default(false)
-  am_ac             Boolean @default(false)
-  am_heating        Boolean @default(false)
-  am_elevator       Boolean @default(false)
-  am_gym            Boolean @default(false)
-
-  views_count     Int @default(0)
-  reach_count     Int @default(0)
-  favorites_count Int @default(0)
-
-  tags Json?
-
-  was_previously_approved Boolean @default(false)
-
-  reject_reason String?
-
-  status_changed_at DateTime?
-
-  user_id  Int?
-  admin_id Int?
-
-  created_at DateTime @default(now())
-  updated_at DateTime @updatedAt
-
-  user Users? @relation("VacationSaleOwner", fields: [user_id], references: [id])
-
-  admin Users? @relation("VacationSaleAdmin", fields: [admin_id], references: [id])
-
-  country Countries @relation(fields: [country_id], references: [id])
-
-  governorate Governorates @relation(fields: [governorate_id], references: [id])
-
-  city Cities @relation(fields: [city_id], references: [id])
-
-  area Areas? @relation(fields: [area_id], references: [id])
-
-  compound Compounds? @relation(fields: [compound_id], references: [id])
-
-  category Categories? @relation(fields: [categoryId], references: [id])
-
-  subCategory SubCategories? @relation(fields: [subCategoryId], references: [id])
-
-  table AllTables @relation(fields: [table_id], references: [id])
-
-  @@index([status])
-  @@index([table_id])
-  @@index([featured_priority])
-  @@index([country_id])
-  @@index([governorate_id])
-  @@index([city_id])
-  @@index([area_id])
-  @@index([compound_id])
-  @@index([categoryId])
-  @@index([subCategoryId])
-  @@index([price])
-  @@index([status, created_at])
-  @@index([status, featured_priority])
-  @@index([status, categoryId, price, city_id])
-  @@index([status, subCategoryId, price, city_id])
 }
 
 model Images {
@@ -504,7 +381,9 @@ model Images {
 
   created_at DateTime @default(now())
 
+  @@index([entity_type, entity_id])
   @@index([entity_id, table_id])
+  @@index([entity_type, entity_id, table_id])
   @@index([table_id])
 }
 
@@ -566,7 +445,7 @@ model AdReach {
   created_at DateTime @default(now())
 
   table   AllTables @relation(fields: [table_id], references: [id], onDelete: Cascade)
-  Users   Users?    @relation(fields: [usersId], references: [id])
+  user    Users?    @relation(fields: [user_id], references: [id])
   usersId Int?
 
   @@unique([entity_id, table_id, user_id])
@@ -719,4 +598,1176 @@ enum ImageEntityType {
   AD
   SLIDER
   BLOG
+}
+
+enum LandType {
+  RESIDENTIAL
+  AGRICULTURAL
+  COMMERCIAL
+  INDUSTRIAL
+}
+
+enum BuildingCondition {
+  NEW
+  OLD
+  UNDER_CONSTRUCTION
+}
+
+enum BuildingUsagesType {
+  RESIDENTIAL
+  COMMERCIAL
+  MIXED_USE
+  INDUSTRIAL
+  ADMINISTRATIVE
+}
+
+model D_Vacation_Sale {
+  id       Int      @id @default(autoincrement())
+  table_id Int
+  status   AdStatus @default(PENDING)
+
+  is_verified Boolean @default(false)
+
+  featured_priority Int @default(0)
+
+  title       String
+  description String @db.VarChar(1200)
+
+  display_phone            Boolean @default(true)
+  display_whatsapp         Boolean @default(true)
+  display_dawaarly_contact Boolean @default(false)
+
+  owner_no1 String?
+  owner_no2 String?
+
+  delivery_no1 String?
+  delivery_no2 String?
+
+  payment_no1 String?
+  payment_no2 String?
+
+  price Decimal? @db.Decimal(12, 2)
+
+  payment_method PaymentMethod?
+
+  down_payment Decimal? @db.Decimal(12, 2)
+
+  installment_years Int?
+
+  ready_to_move Boolean @default(false)
+
+  furnished Boolean @default(false)
+
+  currency Currency @default(EGP)
+
+  country_id     Int
+  governorate_id Int
+  city_id        Int
+
+  area_id     Int?
+  compound_id Int?
+
+  categoryId    Int?
+  subCategoryId Int?
+
+  bedrooms  Int?
+  bathrooms Int?
+
+  area_m2 Int?
+
+  level Int?
+
+  am_seeview        Boolean @default(false)
+  am_pool           Boolean @default(false)
+  am_balcony        Boolean @default(false)
+  am_private_garden Boolean @default(false)
+  am_kitchen        Boolean @default(false)
+  am_ac             Boolean @default(false)
+  am_heating        Boolean @default(false)
+  am_elevator       Boolean @default(false)
+  am_gym            Boolean @default(false)
+
+  views_count     Int @default(0)
+  reach_count     Int @default(0)
+  favorites_count Int @default(0)
+
+  tags Json?
+
+  was_previously_approved Boolean @default(false)
+
+  reject_reason String?
+
+  status_changed_at DateTime?
+
+  user_id  Int?
+  admin_id Int?
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  user Users? @relation("VacationSaleOwner", fields: [user_id], references: [id])
+
+  admin Users? @relation("VacationSaleAdmin", fields: [admin_id], references: [id])
+
+  country Countries @relation(fields: [country_id], references: [id])
+
+  governorate Governorates @relation(fields: [governorate_id], references: [id])
+
+  city Cities @relation(fields: [city_id], references: [id])
+
+  area Areas? @relation(fields: [area_id], references: [id])
+
+  compound Compounds? @relation(fields: [compound_id], references: [id])
+
+  category Categories? @relation(fields: [categoryId], references: [id])
+
+  subCategory SubCategories? @relation(fields: [subCategoryId], references: [id])
+
+  table AllTables @relation(fields: [table_id], references: [id])
+
+  @@index([status])
+  @@index([table_id])
+  @@index([featured_priority])
+  @@index([country_id])
+  @@index([governorate_id])
+  @@index([city_id])
+  @@index([area_id])
+  @@index([compound_id])
+  @@index([categoryId])
+  @@index([subCategoryId])
+  @@index([price])
+  @@index([status, created_at])
+  @@index([status, featured_priority])
+  @@index([status, categoryId, price, city_id])
+  @@index([status, subCategoryId, price, city_id])
+}
+
+model D_Vacation_Rent {
+  id       Int      @id @default(autoincrement())
+  table_id Int
+  status   AdStatus @default(PENDING)
+
+  is_verified Boolean @default(false)
+
+  featured_priority Int @default(0)
+
+  title       String
+  description String @db.VarChar(1200)
+
+  display_phone            Boolean @default(true)
+  display_whatsapp         Boolean @default(true)
+  display_dawaarly_contact Boolean @default(false)
+
+  owner_no1 String?
+  owner_no2 String?
+
+  delivery_no1 String?
+  delivery_no2 String?
+
+  payment_no1 String?
+  payment_no2 String?
+
+  price Decimal? @db.Decimal(12, 2)
+
+  deposit_amount Decimal? @db.Decimal(12, 2)
+
+  rent_frequency       RentFrequencyAndPeriodUnit?
+  min_rent_period      Int?
+  min_rent_period_unit RentFrequencyAndPeriodUnit?
+
+  available_from DateTime?
+  available_to   DateTime?
+
+  currency Currency @default(EGP)
+
+  country_id     Int
+  governorate_id Int
+  city_id        Int
+
+  area_id     Int?
+  compound_id Int?
+
+  categoryId    Int?
+  subCategoryId Int?
+
+  bedrooms  Int?
+  bathrooms Int?
+
+  area_m2 Int?
+
+  level Int?
+
+  adult_no_max Int?
+  child_no_max Int?
+
+  am_seeview        Boolean @default(false)
+  am_pool           Boolean @default(false)
+  am_balcony        Boolean @default(false)
+  am_private_garden Boolean @default(false)
+  am_kitchen        Boolean @default(false)
+  am_ac             Boolean @default(false)
+  am_heating        Boolean @default(false)
+  am_elevator       Boolean @default(false)
+  am_gym            Boolean @default(false)
+
+  views_count     Int @default(0)
+  reach_count     Int @default(0)
+  favorites_count Int @default(0)
+
+  tags Json?
+
+  was_previously_approved Boolean @default(false)
+
+  reject_reason String?
+
+  status_changed_at DateTime?
+
+  user_id  Int?
+  admin_id Int?
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  user Users? @relation("VacationRentOwner", fields: [user_id], references: [id])
+
+  admin Users? @relation("VacationRentAdmin", fields: [admin_id], references: [id])
+
+  country Countries @relation(fields: [country_id], references: [id])
+
+  governorate Governorates @relation(fields: [governorate_id], references: [id])
+
+  city Cities @relation(fields: [city_id], references: [id])
+
+  area Areas? @relation(fields: [area_id], references: [id])
+
+  compound Compounds? @relation(fields: [compound_id], references: [id])
+
+  category Categories? @relation(fields: [categoryId], references: [id])
+
+  subCategory SubCategories? @relation(fields: [subCategoryId], references: [id])
+
+  table AllTables @relation(fields: [table_id], references: [id])
+
+  @@index([status])
+  @@index([table_id])
+  @@index([featured_priority])
+  @@index([country_id])
+  @@index([governorate_id])
+  @@index([city_id])
+  @@index([area_id])
+  @@index([compound_id])
+  @@index([categoryId])
+  @@index([subCategoryId])
+  @@index([price])
+  @@index([status, created_at])
+  @@index([status, featured_priority])
+  @@index([status, categoryId, price, city_id])
+  @@index([status, subCategoryId, price, city_id])
+}
+
+model D_Apartment_Sale {
+  id       Int      @id @default(autoincrement())
+  table_id Int
+  status   AdStatus @default(PENDING)
+
+  is_verified Boolean @default(false)
+
+  featured_priority Int @default(0)
+
+  title       String
+  description String @db.VarChar(1200)
+
+  display_phone            Boolean @default(true)
+  display_whatsapp         Boolean @default(true)
+  display_dawaarly_contact Boolean @default(false)
+
+  owner_no1 String?
+  owner_no2 String?
+
+  delivery_no1 String?
+  delivery_no2 String?
+
+  payment_no1 String?
+  payment_no2 String?
+
+  price Decimal? @db.Decimal(12, 2)
+
+  payment_method PaymentMethod?
+
+  down_payment Decimal? @db.Decimal(12, 2)
+
+  installment_years Int?
+
+  ready_to_move Boolean @default(false)
+
+  furnished Boolean @default(false)
+
+  currency Currency @default(EGP)
+
+  country_id     Int
+  governorate_id Int
+  city_id        Int
+
+  area_id     Int?
+  compound_id Int?
+
+  categoryId    Int?
+  subCategoryId Int?
+
+  bedrooms  Int?
+  bathrooms Int?
+  level     Int?
+  area_m2   Int?
+
+  am_balcony        Boolean @default(false)
+  am_private_garden Boolean @default(false)
+  am_kitchen        Boolean @default(false)
+  am_ac             Boolean @default(false)
+  am_heating        Boolean @default(false)
+  am_elevator       Boolean @default(false)
+  am_gym            Boolean @default(false)
+
+  views_count     Int @default(0)
+  reach_count     Int @default(0)
+  favorites_count Int @default(0)
+
+  tags Json?
+
+  was_previously_approved Boolean @default(false)
+
+  reject_reason String?
+
+  status_changed_at DateTime?
+
+  user_id  Int?
+  admin_id Int?
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  user Users? @relation("ApartmentSaleOwner", fields: [user_id], references: [id])
+
+  admin Users? @relation("ApartmentSaleAdmin", fields: [admin_id], references: [id])
+
+  country Countries @relation(fields: [country_id], references: [id])
+
+  governorate Governorates @relation(fields: [governorate_id], references: [id])
+
+  city Cities @relation(fields: [city_id], references: [id])
+
+  area Areas? @relation(fields: [area_id], references: [id])
+
+  compound Compounds? @relation(fields: [compound_id], references: [id])
+
+  category Categories? @relation(fields: [categoryId], references: [id])
+
+  subCategory SubCategories? @relation(fields: [subCategoryId], references: [id])
+
+  table AllTables @relation(fields: [table_id], references: [id])
+
+  @@index([status])
+  @@index([table_id])
+  @@index([featured_priority])
+  @@index([country_id])
+  @@index([governorate_id])
+  @@index([city_id])
+  @@index([area_id])
+  @@index([compound_id])
+  @@index([categoryId])
+  @@index([subCategoryId])
+  @@index([price])
+  @@index([status, created_at])
+  @@index([status, featured_priority])
+  @@index([status, categoryId, price, city_id])
+  @@index([status, subCategoryId, price, city_id])
+}
+
+model D_Apartment_Rent {
+  id       Int      @id @default(autoincrement())
+  table_id Int
+  status   AdStatus @default(PENDING)
+
+  is_verified Boolean @default(false)
+
+  featured_priority Int @default(0)
+
+  title       String
+  description String @db.VarChar(1200)
+
+  display_phone            Boolean @default(true)
+  display_whatsapp         Boolean @default(true)
+  display_dawaarly_contact Boolean @default(false)
+
+  owner_no1 String?
+  owner_no2 String?
+
+  delivery_no1 String?
+  delivery_no2 String?
+
+  payment_no1 String?
+  payment_no2 String?
+
+  price Decimal? @db.Decimal(12, 2)
+
+  deposit_amount Decimal? @db.Decimal(12, 2)
+
+  rent_frequency       RentFrequencyAndPeriodUnit?
+  min_rent_period      Int?
+  min_rent_period_unit RentFrequencyAndPeriodUnit?
+
+  available_from DateTime?
+  available_to   DateTime?
+
+  currency Currency @default(EGP)
+
+  country_id     Int
+  governorate_id Int
+  city_id        Int
+
+  area_id     Int?
+  compound_id Int?
+
+  categoryId    Int?
+  subCategoryId Int?
+
+  bedrooms  Int?
+  bathrooms Int?
+  level     Int?
+  area_m2   Int?
+
+  adult_no_max Int?
+  child_no_max Int?
+
+  furnished Boolean @default(false)
+
+  am_balcony        Boolean @default(false)
+  am_private_garden Boolean @default(false)
+  am_kitchen        Boolean @default(false)
+  am_ac             Boolean @default(false)
+  am_heating        Boolean @default(false)
+  am_elevator       Boolean @default(false)
+  am_gym            Boolean @default(false)
+
+  views_count     Int @default(0)
+  reach_count     Int @default(0)
+  favorites_count Int @default(0)
+
+  tags Json?
+
+  was_previously_approved Boolean @default(false)
+
+  reject_reason String?
+
+  status_changed_at DateTime?
+
+  user_id  Int?
+  admin_id Int?
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  user Users? @relation("ApartmentRentOwner", fields: [user_id], references: [id])
+
+  admin Users? @relation("ApartmentRentAdmin", fields: [admin_id], references: [id])
+
+  country Countries @relation(fields: [country_id], references: [id])
+
+  governorate Governorates @relation(fields: [governorate_id], references: [id])
+
+  city Cities @relation(fields: [city_id], references: [id])
+
+  area Areas? @relation(fields: [area_id], references: [id])
+
+  compound Compounds? @relation(fields: [compound_id], references: [id])
+
+  category Categories? @relation(fields: [categoryId], references: [id])
+
+  subCategory SubCategories? @relation(fields: [subCategoryId], references: [id])
+
+  table AllTables @relation(fields: [table_id], references: [id])
+
+  @@index([status])
+  @@index([table_id])
+  @@index([featured_priority])
+  @@index([country_id])
+  @@index([governorate_id])
+  @@index([city_id])
+  @@index([area_id])
+  @@index([compound_id])
+  @@index([categoryId])
+  @@index([subCategoryId])
+  @@index([price])
+  @@index([status, created_at])
+  @@index([status, featured_priority])
+  @@index([status, categoryId, price, city_id])
+  @@index([status, subCategoryId, price, city_id])
+}
+
+model D_Villa_Sale {
+  id       Int      @id @default(autoincrement())
+  table_id Int
+  status   AdStatus @default(PENDING)
+
+  is_verified Boolean @default(false)
+
+  featured_priority Int @default(0)
+
+  title       String
+  description String @db.VarChar(1200)
+
+  display_phone            Boolean @default(true)
+  display_whatsapp         Boolean @default(true)
+  display_dawaarly_contact Boolean @default(false)
+
+  owner_no1 String?
+  owner_no2 String?
+
+  delivery_no1 String?
+  delivery_no2 String?
+
+  payment_no1 String?
+  payment_no2 String?
+
+  price Decimal? @db.Decimal(12, 2)
+
+  payment_method PaymentMethod?
+
+  down_payment Decimal? @db.Decimal(12, 2)
+
+  installment_years Int?
+
+  ready_to_move Boolean @default(false)
+
+  furnished Boolean @default(false)
+
+  currency Currency @default(EGP)
+
+  country_id     Int
+  governorate_id Int
+  city_id        Int
+
+  area_id     Int?
+  compound_id Int?
+
+  categoryId    Int?
+  subCategoryId Int?
+
+  bedrooms  Int?
+  bathrooms Int?
+  level     Int?
+  area_m2   Int?
+
+  am_balcony        Boolean @default(false)
+  am_private_garden Boolean @default(false)
+  am_kitchen        Boolean @default(false)
+  am_ac             Boolean @default(false)
+  am_heating        Boolean @default(false)
+  am_elevator       Boolean @default(false)
+  am_gym            Boolean @default(false)
+
+  views_count     Int @default(0)
+  reach_count     Int @default(0)
+  favorites_count Int @default(0)
+
+  tags Json?
+
+  was_previously_approved Boolean @default(false)
+
+  reject_reason String?
+
+  status_changed_at DateTime?
+
+  user_id  Int?
+  admin_id Int?
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  user Users? @relation("VillaSaleOwner", fields: [user_id], references: [id])
+
+  admin Users? @relation("VillaSaleAdmin", fields: [admin_id], references: [id])
+
+  country Countries @relation(fields: [country_id], references: [id])
+
+  governorate Governorates @relation(fields: [governorate_id], references: [id])
+
+  city Cities @relation(fields: [city_id], references: [id])
+
+  area Areas? @relation(fields: [area_id], references: [id])
+
+  compound Compounds? @relation(fields: [compound_id], references: [id])
+
+  category Categories? @relation(fields: [categoryId], references: [id])
+
+  subCategory SubCategories? @relation(fields: [subCategoryId], references: [id])
+
+  table AllTables @relation(fields: [table_id], references: [id])
+
+  @@index([status])
+  @@index([table_id])
+  @@index([featured_priority])
+  @@index([country_id])
+  @@index([governorate_id])
+  @@index([city_id])
+  @@index([area_id])
+  @@index([compound_id])
+  @@index([categoryId])
+  @@index([subCategoryId])
+  @@index([price])
+  @@index([status, created_at])
+  @@index([status, featured_priority])
+  @@index([status, categoryId, price, city_id])
+  @@index([status, subCategoryId, price, city_id])
+}
+
+model D_Villa_Rent {
+  id       Int      @id @default(autoincrement())
+  table_id Int
+  status   AdStatus @default(PENDING)
+
+  is_verified Boolean @default(false)
+
+  featured_priority Int @default(0)
+
+  title       String
+  description String @db.VarChar(1200)
+
+  display_phone            Boolean @default(true)
+  display_whatsapp         Boolean @default(true)
+  display_dawaarly_contact Boolean @default(false)
+
+  owner_no1 String?
+  owner_no2 String?
+
+  delivery_no1 String?
+  delivery_no2 String?
+
+  payment_no1 String?
+  payment_no2 String?
+
+  price Decimal? @db.Decimal(12, 2)
+
+  deposit_amount Decimal? @db.Decimal(12, 2)
+
+  rent_frequency       RentFrequencyAndPeriodUnit?
+  min_rent_period      Int?
+  min_rent_period_unit RentFrequencyAndPeriodUnit?
+
+  available_from DateTime?
+  available_to   DateTime?
+
+  currency Currency @default(EGP)
+
+  country_id     Int
+  governorate_id Int
+  city_id        Int
+
+  area_id     Int?
+  compound_id Int?
+
+  categoryId    Int?
+  subCategoryId Int?
+
+  bedrooms  Int?
+  bathrooms Int?
+  level     Int?
+  area_m2   Int?
+
+  adult_no_max Int?
+  child_no_max Int?
+
+  furnished Boolean @default(false)
+
+  am_balcony        Boolean @default(false)
+  am_private_garden Boolean @default(false)
+  am_kitchen        Boolean @default(false)
+  am_ac             Boolean @default(false)
+  am_heating        Boolean @default(false)
+  am_elevator       Boolean @default(false)
+  am_gym            Boolean @default(false)
+
+  views_count     Int @default(0)
+  reach_count     Int @default(0)
+  favorites_count Int @default(0)
+
+  tags Json?
+
+  was_previously_approved Boolean @default(false)
+
+  reject_reason String?
+
+  status_changed_at DateTime?
+
+  user_id  Int?
+  admin_id Int?
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  user Users? @relation("VillaRentOwner", fields: [user_id], references: [id])
+
+  admin Users? @relation("VillaRentAdmin", fields: [admin_id], references: [id])
+
+  country Countries @relation(fields: [country_id], references: [id])
+
+  governorate Governorates @relation(fields: [governorate_id], references: [id])
+
+  city Cities @relation(fields: [city_id], references: [id])
+
+  area Areas? @relation(fields: [area_id], references: [id])
+
+  compound Compounds? @relation(fields: [compound_id], references: [id])
+
+  category Categories? @relation(fields: [categoryId], references: [id])
+
+  subCategory SubCategories? @relation(fields: [subCategoryId], references: [id])
+
+  table AllTables @relation(fields: [table_id], references: [id])
+
+  @@index([status])
+  @@index([table_id])
+  @@index([featured_priority])
+  @@index([country_id])
+  @@index([governorate_id])
+  @@index([city_id])
+  @@index([area_id])
+  @@index([compound_id])
+  @@index([categoryId])
+  @@index([subCategoryId])
+  @@index([price])
+  @@index([status, created_at])
+  @@index([status, featured_priority])
+  @@index([status, categoryId, price, city_id])
+  @@index([status, subCategoryId, price, city_id])
+}
+
+model D_Commercial_Sale {
+  id       Int      @id @default(autoincrement())
+  table_id Int
+  status   AdStatus @default(PENDING)
+
+  is_verified Boolean @default(false)
+
+  featured_priority Int @default(0)
+
+  title       String
+  description String @db.VarChar(1200)
+
+  display_phone            Boolean @default(true)
+  display_whatsapp         Boolean @default(true)
+  display_dawaarly_contact Boolean @default(false)
+
+  owner_no1 String?
+  owner_no2 String?
+
+  delivery_no1 String?
+  delivery_no2 String?
+
+  payment_no1 String?
+  payment_no2 String?
+
+  price Decimal? @db.Decimal(12, 2)
+
+  payment_method PaymentMethod?
+
+  down_payment Decimal? @db.Decimal(12, 2)
+
+  installment_years Int?
+
+  ready_to_move Boolean @default(false)
+
+  currency Currency @default(EGP)
+
+  country_id     Int
+  governorate_id Int
+  city_id        Int
+
+  area_id     Int?
+  compound_id Int?
+
+  categoryId    Int?
+  subCategoryId Int?
+
+  area_m2 Int?
+
+  am_balcony        Boolean @default(false)
+  am_private_garden Boolean @default(false)
+  am_kitchen        Boolean @default(false)
+  am_ac             Boolean @default(false)
+  am_heating        Boolean @default(false)
+  am_elevator       Boolean @default(false)
+  am_gym            Boolean @default(false)
+
+  views_count     Int @default(0)
+  reach_count     Int @default(0)
+  favorites_count Int @default(0)
+
+  tags Json?
+
+  was_previously_approved Boolean @default(false)
+
+  reject_reason String?
+
+  status_changed_at DateTime?
+
+  user_id  Int?
+  admin_id Int?
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  user Users? @relation("CommercialSaleOwner", fields: [user_id], references: [id])
+
+  admin Users? @relation("CommercialSaleAdmin", fields: [admin_id], references: [id])
+
+  country Countries @relation(fields: [country_id], references: [id])
+
+  governorate Governorates @relation(fields: [governorate_id], references: [id])
+
+  city Cities @relation(fields: [city_id], references: [id])
+
+  area Areas? @relation(fields: [area_id], references: [id])
+
+  compound Compounds? @relation(fields: [compound_id], references: [id])
+
+  category Categories? @relation(fields: [categoryId], references: [id])
+
+  subCategory SubCategories? @relation(fields: [subCategoryId], references: [id])
+
+  table AllTables @relation(fields: [table_id], references: [id])
+
+  @@index([status])
+  @@index([table_id])
+  @@index([featured_priority])
+  @@index([country_id])
+  @@index([governorate_id])
+  @@index([city_id])
+  @@index([area_id])
+  @@index([compound_id])
+  @@index([categoryId])
+  @@index([subCategoryId])
+  @@index([price])
+  @@index([status, created_at])
+  @@index([status, featured_priority])
+  @@index([status, categoryId, price, city_id])
+  @@index([status, subCategoryId, price, city_id])
+}
+
+model D_Commercial_Rent {
+  id       Int      @id @default(autoincrement())
+  table_id Int
+  status   AdStatus @default(PENDING)
+
+  is_verified Boolean @default(false)
+
+  featured_priority Int @default(0)
+
+  title       String
+  description String @db.VarChar(1200)
+
+  display_phone            Boolean @default(true)
+  display_whatsapp         Boolean @default(true)
+  display_dawaarly_contact Boolean @default(false)
+
+  owner_no1 String?
+  owner_no2 String?
+
+  delivery_no1 String?
+  delivery_no2 String?
+
+  payment_no1 String?
+  payment_no2 String?
+
+  price Decimal? @db.Decimal(12, 2)
+
+  deposit_amount Decimal? @db.Decimal(12, 2)
+
+  rent_frequency       RentFrequencyAndPeriodUnit?
+  min_rent_period      Int?
+  min_rent_period_unit RentFrequencyAndPeriodUnit?
+
+  available_from DateTime?
+  available_to   DateTime?
+
+  currency Currency @default(EGP)
+
+  country_id     Int
+  governorate_id Int
+  city_id        Int
+
+  area_id     Int?
+  compound_id Int?
+
+  categoryId    Int?
+  subCategoryId Int?
+
+  area_m2 Int?
+
+  adult_no_max Int?
+  child_no_max Int?
+
+  am_balcony        Boolean @default(false)
+  am_private_garden Boolean @default(false)
+  am_kitchen        Boolean @default(false)
+  am_ac             Boolean @default(false)
+  am_heating        Boolean @default(false)
+  am_elevator       Boolean @default(false)
+  am_gym            Boolean @default(false)
+
+  views_count     Int @default(0)
+  reach_count     Int @default(0)
+  favorites_count Int @default(0)
+
+  tags Json?
+
+  was_previously_approved Boolean @default(false)
+
+  reject_reason String?
+
+  status_changed_at DateTime?
+
+  user_id  Int?
+  admin_id Int?
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  user Users? @relation("CommercialRentOwner", fields: [user_id], references: [id])
+
+  admin Users? @relation("CommercialRentAdmin", fields: [admin_id], references: [id])
+
+  country Countries @relation(fields: [country_id], references: [id])
+
+  governorate Governorates @relation(fields: [governorate_id], references: [id])
+
+  city Cities @relation(fields: [city_id], references: [id])
+
+  area Areas? @relation(fields: [area_id], references: [id])
+
+  compound Compounds? @relation(fields: [compound_id], references: [id])
+
+  category Categories? @relation(fields: [categoryId], references: [id])
+
+  subCategory SubCategories? @relation(fields: [subCategoryId], references: [id])
+
+  table AllTables @relation(fields: [table_id], references: [id])
+
+  @@index([status])
+  @@index([table_id])
+  @@index([featured_priority])
+  @@index([country_id])
+  @@index([governorate_id])
+  @@index([city_id])
+  @@index([area_id])
+  @@index([compound_id])
+  @@index([categoryId])
+  @@index([subCategoryId])
+  @@index([price])
+  @@index([status, created_at])
+  @@index([status, featured_priority])
+  @@index([status, categoryId, price, city_id])
+  @@index([status, subCategoryId, price, city_id])
+}
+model D_Buildings_And_Lands_Sale {
+  id       Int      @id @default(autoincrement())
+  table_id Int
+  status   AdStatus @default(PENDING)
+
+  is_verified Boolean @default(false)
+
+  featured_priority Int @default(0)
+
+  title       String
+  description String @db.VarChar(1200)
+
+  display_phone            Boolean @default(true)
+  display_whatsapp         Boolean @default(true)
+  display_dawaarly_contact Boolean @default(false)
+
+  owner_no1 String?
+  owner_no2 String?
+
+  delivery_no1 String?
+  delivery_no2 String?
+
+  payment_no1 String?
+  payment_no2 String?
+
+  price Decimal? @db.Decimal(12, 2)
+
+  payment_method PaymentMethod?
+
+  down_payment      Decimal? @db.Decimal(12, 2)
+  installment_years Int?
+
+  ready_to_move Boolean @default(false)
+
+  currency Currency @default(EGP)
+
+  country_id     Int
+  governorate_id Int
+  city_id        Int
+
+  area_id     Int?
+  compound_id Int?
+
+  categoryId    Int?
+  subCategoryId Int?
+
+  area_m2 Int?
+
+  floors             Int?
+  building_condition BuildingCondition?
+  land_type          LandType?
+  usage_type          BuildingUsagesType?
+
+  views_count     Int @default(0)
+  reach_count     Int @default(0)
+  favorites_count Int @default(0)
+
+  tags Json?
+
+  was_previously_approved Boolean   @default(false)
+  reject_reason           String?
+  status_changed_at       DateTime?
+
+  user_id  Int?
+  admin_id Int?
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  user  Users? @relation("BuildingsLandsSaleOwner", fields: [user_id], references: [id])
+  admin Users? @relation("BuildingsLandsSaleAdmin", fields: [admin_id], references: [id])
+
+  country     Countries    @relation(fields: [country_id], references: [id])
+  governorate Governorates @relation(fields: [governorate_id], references: [id])
+  city        Cities       @relation(fields: [city_id], references: [id])
+  area        Areas?       @relation(fields: [area_id], references: [id])
+  compound    Compounds?   @relation(fields: [compound_id], references: [id])
+
+  category    Categories?    @relation(fields: [categoryId], references: [id])
+  subCategory SubCategories? @relation(fields: [subCategoryId], references: [id])
+
+  table AllTables @relation(fields: [table_id], references: [id])
+
+  @@index([status])
+  @@index([table_id])
+  @@index([featured_priority])
+  @@index([country_id])
+  @@index([governorate_id])
+  @@index([city_id])
+  @@index([area_id])
+  @@index([compound_id])
+  @@index([categoryId])
+  @@index([subCategoryId])
+  @@index([price])
+  @@index([status, created_at])
+  @@index([status, featured_priority])
+  @@index([status, categoryId, price, city_id])
+  @@index([status, subCategoryId, price, city_id])
+}
+
+model D_Buildings_And_Lands_Rent {
+  id       Int      @id @default(autoincrement())
+  table_id Int
+  status   AdStatus @default(PENDING)
+
+  is_verified Boolean @default(false)
+
+  featured_priority Int @default(0)
+
+  title       String
+  description String @db.VarChar(1200)
+
+  display_phone            Boolean @default(true)
+  display_whatsapp         Boolean @default(true)
+  display_dawaarly_contact Boolean @default(false)
+
+  owner_no1 String?
+  owner_no2 String?
+
+  delivery_no1 String?
+  delivery_no2 String?
+
+  payment_no1 String?
+  payment_no2 String?
+
+  price Decimal? @db.Decimal(12, 2)
+
+  deposit_amount Decimal? @db.Decimal(12, 2)
+
+  rent_frequency       RentFrequencyAndPeriodUnit?
+  min_rent_period      Int?
+  min_rent_period_unit RentFrequencyAndPeriodUnit?
+
+  available_from DateTime?
+  available_to   DateTime?
+
+  currency Currency @default(EGP)
+
+  country_id     Int
+  governorate_id Int
+  city_id        Int
+
+  area_id     Int?
+  compound_id Int?
+
+  categoryId    Int?
+  subCategoryId Int?
+
+  area_m2            Int?
+  floors             Int?
+  building_condition BuildingCondition?
+  land_type          LandType?
+  usage_type          BuildingUsagesType?
+
+  adult_no_max Int?
+  child_no_max Int?
+
+  views_count     Int @default(0)
+  reach_count     Int @default(0)
+  favorites_count Int @default(0)
+
+  tags Json?
+
+  was_previously_approved Boolean   @default(false)
+  reject_reason           String?
+  status_changed_at       DateTime?
+
+  user_id  Int?
+  admin_id Int?
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  user  Users? @relation("BuildingsLandsRentOwner", fields: [user_id], references: [id])
+  admin Users? @relation("BuildingsLandsRentAdmin", fields: [admin_id], references: [id])
+
+  country     Countries    @relation(fields: [country_id], references: [id])
+  governorate Governorates @relation(fields: [governorate_id], references: [id])
+  city        Cities       @relation(fields: [city_id], references: [id])
+  area        Areas?       @relation(fields: [area_id], references: [id])
+  compound    Compounds?   @relation(fields: [compound_id], references: [id])
+
+  category    Categories?    @relation(fields: [categoryId], references: [id])
+  subCategory SubCategories? @relation(fields: [subCategoryId], references: [id])
+
+  table AllTables @relation(fields: [table_id], references: [id])
+
+  @@index([status])
+  @@index([table_id])
+  @@index([featured_priority])
+  @@index([country_id])
+  @@index([governorate_id])
+  @@index([city_id])
+  @@index([area_id])
+  @@index([compound_id])
+  @@index([categoryId])
+  @@index([subCategoryId])
+  @@index([price])
+  @@index([status, created_at])
+  @@index([status, featured_priority])
+  @@index([status, categoryId, price, city_id])
+  @@index([status, subCategoryId, price, city_id])
 }

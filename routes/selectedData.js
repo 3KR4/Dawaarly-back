@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 
 const {
+  getTables,
   getCategories,
   getSubCategories,
   getCountries,
@@ -41,6 +42,8 @@ router.delete(
   deleteItem
 );
 
+
+router.get("/tables", getTables);
 
 router.get("/categories", getCategories);
 router.get("/subcategories", getSubCategories);

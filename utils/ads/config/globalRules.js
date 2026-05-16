@@ -25,6 +25,7 @@ module.exports = {
     "delivery_no2",
     "payment_no1",
     "payment_no2",
+    "is_verified",
     "was_previously_approved",
     "reject_reason",
     "status_changed_at",

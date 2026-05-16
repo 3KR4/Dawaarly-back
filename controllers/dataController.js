@@ -24,6 +24,32 @@ const MODELS = {
 // CRUD OPERATIONS
 // =========================
 
+exports.getTables = async (req, res) => {
+  try {
+    const tables = await prisma.AllTables.findMany({
+      orderBy: { id: "asc" },
+      include: {
+        _count: {
+          select: { categories: true },
+        },
+      },
+    });
+
+    const result = tables.map((table) => ({
+      id: table.id,
+      name_ar: table.name_ar,
+      name_en: table.name_en,
+      slug: table.slug,
+      created_at: table.created_at,
+      childsCount: table._count.categories,
+    }));
+
+    return res.json(result);
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
 exports.createItem = async (req, res) => {
   try {
     const { model } = req.params;

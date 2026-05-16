@@ -17,10 +17,7 @@ const uploadSingleImage = (
     const uploadStream = cloudinary.uploader.upload_stream(
       {
         folder: `${entityType.toLowerCase()}/${entityId}`,
-        transformation: [
-          { fetch_format: "auto" },
-          { quality: "auto:good" },
-        ],
+        transformation: [{ fetch_format: "auto" }, { quality: "auto:good" }],
       },
       async (error, result) => {
         if (error) return reject(error);
@@ -60,11 +57,10 @@ exports.uploadImages = async (req, res) => {
   try {
     const entityType = req.params.entity_type; // AD | BLOG | SLIDER
     const entityId = Number(req.params.entity_id);
-    const tableId = req.params.table_id
-      ? Number(req.params.table_id)
-      : null;
+    const tableId = req.params.table_id ? Number(req.params.table_id) : null;
 
-    const isCover = req.body.is_cover === "true";
+    const coverIndex =
+      req.body.cover_index !== undefined ? Number(req.body.cover_index) : 0;
 
     if (!entityType || !entityId) {
       return res.status(400).json({
@@ -86,7 +82,7 @@ exports.uploadImages = async (req, res) => {
           entityId,
           tableId,
           index,
-          isCover && index === 0,
+          index === coverIndex,
         ),
       ),
     );
@@ -126,10 +122,7 @@ exports.deleteImage = async (req, res) => {
       return res.status(404).json({ message: "Image not found" });
     }
 
-    if (
-      image.entity_type !== entityType ||
-      image.entity_id !== entityId
-    ) {
+    if (image.entity_type !== entityType || image.entity_id !== entityId) {
       return res.status(400).json({
         message: "Image does not belong to the entity",
       });
@@ -141,9 +134,7 @@ exports.deleteImage = async (req, res) => {
       where: { id: imageId },
     });
 
-    return res
-      .status(200)
-      .json({ message: "Image deleted successfully" });
+    return res.status(200).json({ message: "Image deleted successfully" });
   } catch (err) {
     console.error(err);
 
@@ -176,10 +167,7 @@ exports.updateImage = async (req, res) => {
       });
     }
 
-    if (
-      image.entity_type !== entityType ||
-      image.entity_id !== entityId
-    ) {
+    if (image.entity_type !== entityType || image.entity_id !== entityId) {
       return res.status(400).json({
         message: "Image does not belong to the entity",
       });
@@ -206,14 +194,11 @@ exports.updateImage = async (req, res) => {
             ? is_cover === true || is_cover === "true"
             : image.is_cover,
 
-        order:
-          order !== undefined ? Number(order) : image.order,
+        order: order !== undefined ? Number(order) : image.order,
       },
     });
 
-    return res
-      .status(200)
-      .json({ message: "Image updated successfully" });
+    return res.status(200).json({ message: "Image updated successfully" });
   } catch (err) {
     console.error(err);
 

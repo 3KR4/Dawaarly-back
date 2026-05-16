@@ -5,7 +5,35 @@ const tableRules = require("../config/tableRules");
 module.exports = (data) => {
   const table_id = Number(data.table_id);
 
+  const table = tableRegistry[table_id];
 
+  if (!table) {
+    return {
+      error: "Invalid table_id",
+    };
+  }
+
+  // 1. reject fields that do not belong to this ad table
+  const allowedFields = [
+    ...globalRules.required,
+    ...globalRules.optional,
+    ...(tableRules[table_id]?.required || []),
+    ...(tableRules[table_id]?.allowed || []),
+  ];
+
+  const invalidFields = Object.keys(data).filter(
+    (key) => !allowedFields.includes(key),
+  );
+
+  if (invalidFields.length) {
+    return {
+      error: "Unexpected fields",
+      message: `Unexpected field${invalidFields.length > 1 ? "s" : ""}: ${invalidFields.join(
+        ", ",
+      )}`,
+      invalidFields,
+    };
+  }
 
   // 2. global required fields
   const globalMissing = globalRules.required.filter(
@@ -28,20 +56,8 @@ module.exports = (data) => {
     };
   }
 
-  // 5. optional: validate allowed fields existence (not required)
-  const allowedFields = tableRules[table_id]?.allowed || [];
-
-  const invalidFields = Object.keys(data).filter((key) => {
-    const isGlobal =
-      globalRules.required.includes(key) || globalRules.optional.includes(key);
-    const isTableAllowed = allowedFields.includes(key);
-    const isSystemField = key === "table_id";
-
-    return !isGlobal && !isTableAllowed && !isSystemField;
-  });
-
   return {
     error: null,
-    invalidFields: invalidFields.length ? invalidFields : undefined,
+    table,
   };
 };

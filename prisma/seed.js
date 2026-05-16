@@ -6956,135 +6956,298 @@ async function main() {
         name_en: "Vacation Homes for Rent",
         name_ar: "بيوت مصايف للإيجار",
       },
+
+      {
+        id: 3,
+        slug: "apartment-sale",
+        name_en: "Apartments for Sale",
+        name_ar: "شقق للبيع",
+      },
+      {
+        id: 4,
+        slug: "apartment-rent",
+        name_en: "Apartments for Rent",
+        name_ar: "شقق للإيجار",
+      },
+
+      {
+        id: 5,
+        slug: "villa-sale",
+        name_en: "Villas for Sale",
+        name_ar: "فلل للبيع",
+      },
+      {
+        id: 6,
+        slug: "villa-rent",
+        name_en: "Villas for Rent",
+        name_ar: "فلل للإيجار",
+      },
+
+      {
+        id: 7,
+        slug: "commercial-sale",
+        name_en: "Commercial for Sale",
+        name_ar: "تجاري للبيع",
+      },
+      {
+        id: 8,
+        slug: "commercial-rent",
+        name_en: "Commercial for Rent",
+        name_ar: "تجاري للإيجار",
+      },
+
+      {
+        id: 9,
+        slug: "buildings-lands-sale",
+        name_en: "Buildings & Lands for Sale",
+        name_ar: "مباني وأراضي للبيع",
+      },
+      {
+        id: 10,
+        slug: "buildings-lands-rent",
+        name_en: "Buildings & Lands for Rent",
+        name_ar: "مباني وأراضي للإيجار",
+      },
     ],
     skipDuplicates: true,
   });
 
   // =========================
-  // VACATION SALE CATEGORIES
+  // VACATION SALE
   // table_id = 1
   // =========================
 
   await prisma.categories.createMany({
     data: [
-      {
-        id: 1,
-        table_id: 1,
-        name_en: "Villa",
-        name_ar: "فيلا",
-      },
-      {
-        id: 2,
-        table_id: 1,
-        name_en: "Chalet",
-        name_ar: "شاليه",
-      },
-      {
-        id: 3,
-        table_id: 1,
-        name_en: "Apartment",
-        name_ar: "شقة",
-      },
-      {
-        id: 4,
-        table_id: 1,
-        name_en: "Studio",
-        name_ar: "استوديو",
-      },
-      {
-        id: 5,
-        table_id: 1,
-        name_en: "Hotel Room",
-        name_ar: "غرفة فندقية",
-      },
-      {
-        id: 6,
-        table_id: 1,
-        name_en: "Duplex",
-        name_ar: "دوبلكس",
-      },
-      {
-        id: 7,
-        table_id: 1,
-        name_en: "Penthouse",
-        name_ar: "بنتهاوس",
-      },
-      {
-        id: 8,
-        table_id: 1,
-        name_en: "Cabin",
-        name_ar: "كبينة",
-      },
+      { id: 1, table_id: 1, name_en: "Villa", name_ar: "فيلا" },
+      { id: 2, table_id: 1, name_en: "Chalet", name_ar: "شاليه" },
+      { id: 3, table_id: 1, name_en: "Apartment", name_ar: "شقة" },
+      { id: 4, table_id: 1, name_en: "Studio", name_ar: "استوديو" },
+      { id: 6, table_id: 1, name_en: "Duplex", name_ar: "دوبلكس" },
+      { id: 7, table_id: 1, name_en: "Penthouse", name_ar: "بنتهاوس" },
     ],
     skipDuplicates: true,
   });
 
   // =========================
-  // VACATION RENT CATEGORIES
+  // VACATION RENT
   // table_id = 2
   // =========================
 
   await prisma.categories.createMany({
     data: [
-      {
-        id: 9,
-        table_id: 2,
-        name_en: "Villa",
-        name_ar: "فيلا",
-      },
-      {
-        id: 10,
-        table_id: 2,
-        name_en: "Chalet",
-        name_ar: "شاليه",
-      },
-      {
-        id: 11,
-        table_id: 2,
-        name_en: "Apartment",
-        name_ar: "شقة",
-      },
-      {
-        id: 12,
-        table_id: 2,
-        name_en: "Studio",
-        name_ar: "استوديو",
-      },
-      {
-        id: 13,
-        table_id: 2,
-        name_en: "Hotel Room",
-        name_ar: "غرفة فندقية",
-      },
-      {
-        id: 14,
-        table_id: 2,
-        name_en: "Duplex",
-        name_ar: "دوبلكس",
-      },
-      {
-        id: 15,
-        table_id: 2,
-        name_en: "Penthouse",
-        name_ar: "بنتهاوس",
-      },
-      {
-        id: 16,
-        table_id: 2,
-        name_en: "Cabin",
-        name_ar: "كبينة",
-      },
+      { id: 9, table_id: 2, name_en: "Villa", name_ar: "فيلا" },
+      { id: 10, table_id: 2, name_en: "Chalet", name_ar: "شاليه" },
+      { id: 11, table_id: 2, name_en: "Apartment", name_ar: "شقة" },
+      { id: 12, table_id: 2, name_en: "Studio", name_ar: "استوديو" },
+      { id: 13, table_id: 2, name_en: "Hotel Room", name_ar: "غرفة فندقية" },
+      { id: 14, table_id: 2, name_en: "Duplex", name_ar: "دوبلكس" },
+      { id: 15, table_id: 2, name_en: "Penthouse", name_ar: "بنتهاوس" },
+      { id: 16, table_id: 2, name_en: "Cabin", name_ar: "كبينة" },
     ],
     skipDuplicates: true,
   });
 
   // =========================
-  // SALE SUB CATEGORIES
-  // category_id = 5
+  // APARTMENT SALE
+  // table_id = 3
+  // =========================
+
+  await prisma.categories.createMany({
+    data: [
+      { id: 17, table_id: 3, name_en: "Apartment", name_ar: "شقة" },
+      { id: 18, table_id: 3, name_en: "Duplex", name_ar: "دوبلكس" },
+      { id: 19, table_id: 3, name_en: "Penthouse", name_ar: "بنتهاوس" },
+      { id: 20, table_id: 3, name_en: "Studio", name_ar: "استوديو" },
+      {
+        id: 21,
+        table_id: 3,
+        name_en: "Hotel Apartment",
+        name_ar: "شقة فندقية",
+      },
+      { id: 22, table_id: 3, name_en: "Roof", name_ar: "روف" },
+    ],
+    skipDuplicates: true,
+  });
+
+  // =========================
+  // APARTMENT RENT
+  // table_id = 4
+  // =========================
+
+  await prisma.categories.createMany({
+    data: [
+      { id: 23, table_id: 4, name_en: "Apartment", name_ar: "شقة" },
+      { id: 24, table_id: 4, name_en: "Duplex", name_ar: "دوبلكس" },
+      { id: 25, table_id: 4, name_en: "Studio", name_ar: "استوديو" },
+      {
+        id: 26,
+        table_id: 4,
+        name_en: "Hotel Apartment",
+        name_ar: "شقة فندقية",
+      },
+      { id: 27, table_id: 4, name_en: "Penthouse", name_ar: "بنتهاوس" },
+      { id: 28, table_id: 4, name_en: "Room", name_ar: "غرفة" },
+      { id: 29, table_id: 4, name_en: "Roof", name_ar: "روف" },
+    ],
+    skipDuplicates: true,
+  });
+
+  // =========================
+  // VILLA SALE
+  // table_id = 5
+  // =========================
+
+  await prisma.categories.createMany({
+    data: [
+      {
+        id: 30,
+        table_id: 5,
+        name_en: "Stand Alone Villa",
+        name_ar: "فيلا مستقلة",
+      },
+      { id: 31, table_id: 5, name_en: "Town House", name_ar: "تاون هاوس" },
+      { id: 32, table_id: 5, name_en: "Twin House", name_ar: "توين هاوس" },
+      { id: 33, table_id: 5, name_en: "iVilla", name_ar: "آي فيلا" },
+    ],
+    skipDuplicates: true,
+  });
+
+  // =========================
+  // VILLA RENT
+  // table_id = 6
+  // =========================
+
+  await prisma.categories.createMany({
+    data: [
+      {
+        id: 34,
+        table_id: 6,
+        name_en: "Stand Alone Villa",
+        name_ar: "فيلا مستقلة",
+      },
+      { id: 35, table_id: 6, name_en: "Town House", name_ar: "تاون هاوس" },
+      { id: 36, table_id: 6, name_en: "Twin House", name_ar: "توين هاوس" },
+      { id: 37, table_id: 6, name_en: "iVilla", name_ar: "آي فيلا" },
+    ],
+    skipDuplicates: true,
+  });
+
+  // =========================
+  // COMMERCIAL SALE
+  // table_id = 7
+  // =========================
+
+  await prisma.categories.createMany({
+    data: [
+      { id: 38, table_id: 7, name_en: "Clinic", name_ar: "عيادة" },
+      { id: 39, table_id: 7, name_en: "Factory", name_ar: "مصنع" },
+      {
+        id: 40,
+        table_id: 7,
+        name_en: "Full Commercial Building",
+        name_ar: "مبنى تجاري كامل",
+      },
+      { id: 41, table_id: 7, name_en: "Garage", name_ar: "جراج" },
+      { id: 42, table_id: 7, name_en: "Office Space", name_ar: "مكتب" },
+      {
+        id: 43,
+        table_id: 7,
+        name_en: "Restaurant & Cafe",
+        name_ar: "مطعم وكافيه",
+      },
+      { id: 44, table_id: 7, name_en: "Retail", name_ar: "محل تجاري" },
+      { id: 45, table_id: 7, name_en: "Warehouse", name_ar: "مخزن" },
+      { id: 46, table_id: 7, name_en: "Pharmacy", name_ar: "صيدلية" },
+      {
+        id: 47,
+        table_id: 7,
+        name_en: "Medical Facility",
+        name_ar: "منشأة طبية",
+      },
+      { id: 48, table_id: 7, name_en: "Showroom", name_ar: "معرض" },
+      { id: 49, table_id: 7, name_en: "Other", name_ar: "أخرى" },
+    ],
+    skipDuplicates: true,
+  });
+
+  // =========================
+  // COMMERCIAL RENT
+  // table_id = 8
+  // =========================
+
+  await prisma.categories.createMany({
+    data: [
+      { id: 50, table_id: 8, name_en: "Clinic", name_ar: "عيادة" },
+      { id: 51, table_id: 8, name_en: "Factory", name_ar: "مصنع" },
+      {
+        id: 52,
+        table_id: 8,
+        name_en: "Full Commercial Building",
+        name_ar: "مبنى تجاري كامل",
+      },
+      { id: 53, table_id: 8, name_en: "Garage", name_ar: "جراج" },
+      { id: 54, table_id: 8, name_en: "Office Space", name_ar: "مكتب" },
+      {
+        id: 55,
+        table_id: 8,
+        name_en: "Restaurant & Cafe",
+        name_ar: "مطعم وكافيه",
+      },
+      { id: 56, table_id: 8, name_en: "Retail", name_ar: "محل تجاري" },
+      { id: 57, table_id: 8, name_en: "Warehouse", name_ar: "مخزن" },
+      { id: 58, table_id: 8, name_en: "Pharmacy", name_ar: "صيدلية" },
+      {
+        id: 59,
+        table_id: 8,
+        name_en: "Medical Facility",
+        name_ar: "منشأة طبية",
+      },
+      { id: 60, table_id: 8, name_en: "Showroom", name_ar: "معرض" },
+      { id: 61, table_id: 8, name_en: "Other", name_ar: "أخرى" },
+    ],
+    skipDuplicates: true,
+  });
+
+  // =========================
+  // BUILDINGS & LANDS SALE
+  // table_id = 9
+  // =========================
+
+  await prisma.categories.createMany({
+    data: [
+      { id: 62, table_id: 9, name_en: "Agricultural", name_ar: "زراعي" },
+      { id: 63, table_id: 9, name_en: "Any Use", name_ar: "متعدد الاستخدام" },
+      { id: 64, table_id: 9, name_en: "Commercial", name_ar: "تجاري" },
+      { id: 65, table_id: 9, name_en: "Industrial", name_ar: "صناعي" },
+      { id: 66, table_id: 9, name_en: "Residential", name_ar: "سكني" },
+    ],
+    skipDuplicates: true,
+  });
+
+  // =========================
+  // BUILDINGS & LANDS RENT
+  // table_id = 10
+  // =========================
+
+  await prisma.categories.createMany({
+    data: [
+      { id: 67, table_id: 10, name_en: "Agricultural", name_ar: "زراعي" },
+      { id: 68, table_id: 10, name_en: "Any Use", name_ar: "متعدد الاستخدام" },
+      { id: 69, table_id: 10, name_en: "Commercial", name_ar: "تجاري" },
+      { id: 70, table_id: 10, name_en: "Industrial", name_ar: "صناعي" },
+      { id: 71, table_id: 10, name_en: "Residential", name_ar: "سكني" },
+    ],
+    skipDuplicates: true,
+  });
+
+  // =========================
+  // SUB CATEGORIES
   // =========================
 
   await prisma.subCategories.createMany({
     data: [
+      // Vacation Sale Hotel Room
       {
         id: 1,
         category_id: 5,
@@ -7103,17 +7266,8 @@ async function main() {
         name_en: "Suite",
         name_ar: "جناح",
       },
-    ],
-    skipDuplicates: true,
-  });
 
-  // =========================
-  // RENT SUB CATEGORIES
-  // category_id = 13
-  // =========================
-
-  await prisma.subCategories.createMany({
-    data: [
+      // Vacation Rent Hotel Room
       {
         id: 4,
         category_id: 13,
@@ -7133,6 +7287,337 @@ async function main() {
         name_ar: "جناح",
       },
     ],
+    skipDuplicates: true,
+  });
+
+  await prisma.SubCategories.createMany({
+    data: [
+      // =====================================
+      // VILLA
+      // category_id = 1
+      // =====================================
+
+      {
+        category_id: 1,
+        name_en: "Stand Alone Villa",
+        name_ar: "فيلا مستقلة",
+      },
+      {
+        category_id: 1,
+        name_en: "Town House",
+        name_ar: "تاون هاوس",
+      },
+      {
+        category_id: 1,
+        name_en: "Twin House",
+        name_ar: "توين هاوس",
+      },
+      {
+        category_id: 1,
+        name_en: "iVilla",
+        name_ar: "آي فيلا",
+      },
+
+      // =====================================
+      // CHALET
+      // category_id = 2
+      // =====================================
+
+      {
+        category_id: 2,
+        name_en: "Ground Chalet",
+        name_ar: "شاليه أرضي",
+      },
+      {
+        category_id: 2,
+        name_en: "Upper Chalet",
+        name_ar: "شاليه علوي",
+      },
+      {
+        category_id: 2,
+        name_en: "Duplex Chalet",
+        name_ar: "شاليه دوبلكس",
+      },
+      {
+        category_id: 2,
+        name_en: "Hotel Chalet",
+        name_ar: "شاليه فندقي",
+      },
+
+      // =====================================
+      // APARTMENT
+      // category_id = 3
+      // =====================================
+
+      {
+        category_id: 3,
+        name_en: "Regular Apartment",
+        name_ar: "شقة عادية",
+      },
+      {
+        category_id: 3,
+        name_en: "Hotel Apartment",
+        name_ar: "شقة فندقية",
+      },
+      {
+        category_id: 3,
+        name_en: "Serviced Apartment",
+        name_ar: "شقة مخدومة",
+      },
+      {
+        category_id: 3,
+        name_en: "Duplex Apartment",
+        name_ar: "شقة دوبلكس",
+      },
+
+      // =====================================
+      // STUDIO
+      // category_id = 4
+      // =====================================
+
+      {
+        category_id: 4,
+        name_en: "Regular Studio",
+        name_ar: "استوديو عادي",
+      },
+      {
+        category_id: 4,
+        name_en: "Hotel Studio",
+        name_ar: "استوديو فندقي",
+      },
+      {
+        category_id: 4,
+        name_en: "Serviced Studio",
+        name_ar: "استوديو مخدوم",
+      },
+
+      // =====================================
+      // DUPLEX
+      // category_id = 6
+      // =====================================
+
+      {
+        category_id: 6,
+        name_en: "Roof Duplex",
+        name_ar: "دوبلكس بروف",
+      },
+      {
+        category_id: 6,
+        name_en: "Garden Duplex",
+        name_ar: "دوبلكس بحديقة",
+      },
+      {
+        category_id: 6,
+        name_en: "Triplex",
+        name_ar: "تربلكس",
+      },
+
+      // =====================================
+      // PENTHOUSE
+      // category_id = 7
+      // =====================================
+
+      {
+        category_id: 7,
+        name_en: "Single Floor Penthouse",
+        name_ar: "بنتهاوس دور واحد",
+      },
+      {
+        category_id: 7,
+        name_en: "Duplex Penthouse",
+        name_ar: "بنتهاوس دوبلكس",
+      },
+
+      // =====================================
+      // HOTEL ROOM
+      // category_id = 13
+      // =====================================
+
+      {
+        category_id: 13,
+        name_en: "Single Room",
+        name_ar: "غرفة فردية",
+      },
+      {
+        category_id: 13,
+        name_en: "Double Room",
+        name_ar: "غرفة مزدوجة",
+      },
+      {
+        category_id: 13,
+        name_en: "Suite",
+        name_ar: "جناح",
+      },
+      {
+        category_id: 13,
+        name_en: "Family Room",
+        name_ar: "غرفة عائلية",
+      },
+
+      // =====================================
+      // CABIN
+      // category_id = 16
+      // =====================================
+
+      {
+        category_id: 16,
+        name_en: "Wooden Cabin",
+        name_ar: "كبينة خشبية",
+      },
+      {
+        category_id: 16,
+        name_en: "Beach Cabin",
+        name_ar: "كبينة شاطئية",
+      },
+      {
+        category_id: 16,
+        name_en: "Family Cabin",
+        name_ar: "كبينة عائلية",
+      },
+    ],
+
+    skipDuplicates: true,
+  });
+
+    await prisma.SubCategories.createMany({
+    data: [
+      // =====================================
+      // VILLA
+      // category_id = 1
+      // =====================================
+
+      {
+        category_id: 2,
+        name_en: "Stand Alone Villa",
+        name_ar: "فيلا مستقلة",
+      },
+      {
+        category_id: 2,
+        name_en: "Town House",
+        name_ar: "تاون هاوس",
+      },
+      {
+        category_id: 2,
+        name_en: "Twin House",
+        name_ar: "توين هاوس",
+      },
+      {
+        category_id: 2,
+        name_en: "iVilla",
+        name_ar: "آي فيلا",
+      },
+
+      // =====================================
+      // CHALET
+      // category_id = 2
+      // =====================================
+
+      {
+        category_id: 10,
+        name_en: "Ground Chalet",
+        name_ar: "شاليه أرضي",
+      },
+      {
+        category_id: 10,
+        name_en: "Upper Chalet",
+        name_ar: "شاليه علوي",
+      },
+      {
+        category_id: 10,
+        name_en: "Duplex Chalet",
+        name_ar: "شاليه دوبلكس",
+      },
+      {
+        category_id: 10,
+        name_en: "Hotel Chalet",
+        name_ar: "شاليه فندقي",
+      },
+
+      // =====================================
+      // APARTMENT
+      // category_id = 3
+      // =====================================
+
+      {
+        category_id: 11,
+        name_en: "Regular Apartment",
+        name_ar: "شقة عادية",
+      },
+      {
+        category_id: 11,
+        name_en: "Hotel Apartment",
+        name_ar: "شقة فندقية",
+      },
+      {
+        category_id: 11,
+        name_en: "Serviced Apartment",
+        name_ar: "شقة مخدومة",
+      },
+      {
+        category_id: 11,
+        name_en: "Duplex Apartment",
+        name_ar: "شقة دوبلكس",
+      },
+
+      // =====================================
+      // STUDIO
+      // category_id = 4
+      // =====================================
+
+      {
+        category_id: 12,
+        name_en: "Regular Studio",
+        name_ar: "استوديو عادي",
+      },
+      {
+        category_id: 12,
+        name_en: "Hotel Studio",
+        name_ar: "استوديو فندقي",
+      },
+      {
+        category_id: 12,
+        name_en: "Serviced Studio",
+        name_ar: "استوديو مخدوم",
+      },
+
+      // =====================================
+      // DUPLEX
+      // category_id = 6
+      // =====================================
+
+      {
+        category_id: 14,
+        name_en: "Roof Duplex",
+        name_ar: "دوبلكس بروف",
+      },
+      {
+        category_id: 14,
+        name_en: "Garden Duplex",
+        name_ar: "دوبلكس بحديقة",
+      },
+      {
+        category_id: 14,
+        name_en: "Triplex",
+        name_ar: "تربلكس",
+      },
+
+      // =====================================
+      // PENTHOUSE
+      // category_id = 7
+      // =====================================
+
+      {
+        category_id: 15,
+        name_en: "Single Floor Penthouse",
+        name_ar: "بنتهاوس دور واحد",
+      },
+      {
+        category_id: 15,
+        name_en: "Duplex Penthouse",
+        name_ar: "بنتهاوس دوبلكس",
+      },
+    ],
+
     skipDuplicates: true,
   });
 

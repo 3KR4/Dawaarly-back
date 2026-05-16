@@ -28,6 +28,13 @@ const adIncludeRelations = {
     },
   },
 
+  table: {
+    select: {
+      id: true,
+      name_ar: true,
+      name_en: true,
+    },
+  },
   category: true,
   subCategory: true,
 
@@ -43,6 +50,13 @@ const adIncludeListRelations = {
   area: true,
   compound: true,
 
+  table: {
+    select: {
+      id: true,
+      name_ar: true,
+      name_en: true,
+    },
+  },
   category: true,
   subCategory: true,
 };
@@ -58,7 +72,9 @@ function formatListAd(ad) {
     currency: ad.currency,
     rent_frequency: ad.rent_frequency,
     status: ad.status,
+    is_verified: ad.is_verified,
     created_at: ad.created_at,
+    table: ad.table,
     city: ad.city,
     governorate: ad.governorate,
     area: ad.area,
@@ -120,25 +136,46 @@ async function enrichAds(ads, userId = null, mode = "list") {
   let images = [];
   let favorites = [];
 
+  // =========================
+  // LOAD DATA
+  // =========================
   for (const table_id in groupedByTable) {
     const ids = groupedByTable[table_id];
 
+    // =========================
+    // DETAIL => ALL IMAGES
+    // LIST => COVER ONLY
+    // =========================
     const tableImages = await prisma.images.findMany({
       where: {
         table_id: Number(table_id),
+
         entity_id: {
           in: ids,
         },
+
+        ...(mode === "list" && {
+          is_cover: true,
+        }),
+      },
+
+      orderBy: {
+        order: "asc",
       },
     });
 
     images.push(...tableImages);
 
+    // =========================
+    // FAVORITES
+    // =========================
     if (userId) {
       const tableFavorites = await prisma.adFavorite.findMany({
         where: {
           user_id: userId,
+
           table_id: Number(table_id),
+
           entity_id: {
             in: ids,
           },
@@ -184,11 +221,30 @@ async function enrichAds(ads, userId = null, mode = "list") {
     const formatted =
       mode === "detail"
         ? formatDetailAd({ ...ad, images: adImages })
-        : formatListAd({ ...ad, images: adImages });
+        : formatListAd({
+            ...ad,
+            image: adImages[0] || null,
+          });
+
+    const { table_id, table, ...responseAd } = formatted;
 
     return {
-      ...formatted,
-      images: adImages,
+      ...responseAd,
+
+      department: table || {
+        id: ad.table_id,
+        name_ar: null,
+        name_en: null,
+      },
+
+      ...(mode === "detail" && {
+        images: adImages,
+      }),
+
+      ...(mode === "list" && {
+        image: adImages[0] || null,
+      }),
+
       isFavorite: isFav,
     };
   });
@@ -244,6 +300,29 @@ const getAvailableAdTables = () =>
     .map((table_id) => ({ table_id, prismaModel: getModel(table_id) }))
     .filter((entry) => entry.prismaModel);
 
+const sectionFieldByType = {
+  gov: "governorate_id",
+  governorate: "governorate_id",
+  city: "city_id",
+  area: "area_id",
+  compound: "compound_id",
+  compounds: "compound_id",
+  category: "categoryId",
+  subCategory: "subCategoryId",
+  sub_category: "subCategoryId",
+  subcategory: "subCategoryId",
+};
+
+const specificTableSectionTypes = new Set([
+  "category",
+  "subCategory",
+  "sub_category",
+  "subcategory",
+]);
+
+const normalizeBoolean = (value) =>
+  value === true || value === "true" || value === 1 || value === "1";
+
 exports.createAd = async (req, res) => {
   try {
     const data = req.body;
@@ -296,6 +375,7 @@ exports.createAd = async (req, res) => {
       user_id: isAdmin ? null : user.id,
       admin_id: isAdmin ? user.id : null,
       status,
+      is_verified: isAdmin,
 
       status_changed_at: isAdmin ? new Date() : null,
     };
@@ -407,6 +487,10 @@ exports.updateAd = async (req, res) => {
       dataToUpdate.available_to = new Date(req.body.available_to);
     }
 
+    if (isAdmin && req.body.is_verified !== undefined) {
+      dataToUpdate.is_verified = normalizeBoolean(req.body.is_verified);
+    }
+
     // pending after edit
     if (!isAdmin && ad.status === "ACTIVE") {
       dataToUpdate.status = "PENDING";
@@ -416,6 +500,10 @@ exports.updateAd = async (req, res) => {
     // prevent changing protected fields
     delete dataToUpdate.id;
     delete dataToUpdate.user_id;
+
+    if (!isAdmin) {
+      delete dataToUpdate.is_verified;
+    }
 
     // =========================
     // UPDATE
@@ -892,37 +980,134 @@ exports.getUserAds = async (req, res) => {
   try {
     const userId = Number(req.params.userId);
     const { page, limit, skip } = pagination(req.query);
+    const viewerId = req.user?.id || null;
+    const isAdmin = req.user?.is_super_admin || req.user?.user_type === "ADMIN";
+    const canViewAllStatuses = isAdmin || viewerId === userId;
+    const table_id = req.query.table_id ? Number(req.query.table_id) : null;
 
-    const cacheKey = `userAds:${userId}:${page}:${limit}:${JSON.stringify(req.query)}`;
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid userId",
+      });
+    }
+
+    if (req.query.table_id && !table_id) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid table_id",
+      });
+    }
+
+    const profileWhere = {
+      OR: [{ user_id: userId }, { admin_id: userId }],
+    };
+
+    const filtersWhere = buildAdsWhere(req.query, canViewAllStatuses, {
+      includeDynamic: Boolean(table_id),
+    });
+
+    const where = {
+      AND: [
+        profileWhere,
+        ...(filtersWhere.AND ? filtersWhere.AND : [filtersWhere]).filter(
+          (filter) => Object.keys(filter).length,
+        ),
+      ],
+    };
+
+    const orderBy = getAdsOrderBy(req.query);
+
+    const crypto = require("crypto");
+
+    const hash = crypto
+      .createHash("md5")
+      .update(
+        JSON.stringify({
+          query: req.query,
+          where,
+          orderBy,
+          canViewAllStatuses,
+        }),
+      )
+      .digest("hex");
+
+    const cacheKey = `userAds:${userId}:${viewerId || "guest"}:${page}:${limit}:${hash}`;
 
     const cached = await getCache(cacheKey);
 
     if (cached) {
-      const data = await enrichAds(cached.data, userId, "list");
-
-      return res.json({
-        ...cached,
-        data,
-      });
+      return res.json(cached);
     }
 
-    const where = {
-      OR: [{ user_id: Number(userId) }, { admin_id: Number(userId) }],
-    };
-    const [ads, total] = await Promise.all([
-      prisma.D_Vacation_Rent.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: { created_at: "desc" },
-        include: adIncludeListRelations,
-      }),
-      prisma.D_Vacation_Rent.count({ where }),
-    ]);
+    if (table_id) {
+      const prismaModel = getModel(table_id);
 
-    const data = await enrichAds(ads, userId, "list");
+      if (!prismaModel) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid table_id",
+        });
+      }
+
+      const [ads, total] = await Promise.all([
+        prismaModel.findMany({
+          where,
+          skip,
+          take: limit,
+          orderBy,
+          include: adIncludeListRelations,
+        }),
+        prismaModel.count({ where }),
+      ]);
+
+      const data = await enrichAds(ads, viewerId, "list");
+
+      const response = {
+        success: true,
+        data,
+        pagination: {
+          total,
+          page,
+          limit,
+          totalPages: Math.ceil(total / limit),
+        },
+      };
+
+      await setCache(cacheKey, response, 60);
+
+      return res.json(response);
+    }
+
+    const tables = getAvailableAdTables();
+    const takePerTable = skip + limit;
+
+    const tableResults = await Promise.all(
+      tables.map(async ({ prismaModel }) => {
+        const [records, count] = await Promise.all([
+          prismaModel.findMany({
+            where,
+            take: takePerTable,
+            orderBy,
+            include: adIncludeListRelations,
+          }),
+          prismaModel.count({ where }),
+        ]);
+
+        return { records, count };
+      }),
+    );
+
+    const total = tableResults.reduce((sum, result) => sum + result.count, 0);
+    const ads = tableResults
+      .flatMap((result) => result.records)
+      .sort(compareAds(req.query))
+      .slice(skip, skip + limit);
+
+    const data = await enrichAds(ads, viewerId, "list");
 
     const response = {
+      success: true,
       data,
       pagination: {
         total,
@@ -936,40 +1121,119 @@ exports.getUserAds = async (req, res) => {
 
     return res.json(response);
   } catch (err) {
-    return res.status(500).json({ message: err.message });
+    return res.status(500).json({ success: false, message: err.message });
   }
 };
 exports.getSectionsAds = async (req, res) => {
   try {
     const { type, value } = req.query;
     const { page, limit, skip } = pagination(req.query);
+    const userId = req.user?.id || null;
+    const table_id = req.query.table_id ? Number(req.query.table_id) : null;
+    const sectionField = sectionFieldByType[type];
+    const sectionValue = Number(value);
 
-    const cacheKey = `sections:${type}:${value}:${page}:${limit}`;
+    if (!sectionField || !sectionValue) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Invalid section params. Send type and numeric value. Allowed types: governorate, city, area, compound, category, subCategory",
+      });
+    }
+
+    if (req.query.table_id && !table_id) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid table_id",
+      });
+    }
+
+    if (specificTableSectionTypes.has(type) && !table_id) {
+      return res.status(400).json({
+        success: false,
+        message: "table_id is required for category and subCategory sections",
+      });
+    }
+
+    const cacheKey = `sections:${userId || "guest"}:${JSON.stringify(req.query)}:${page}:${limit}`;
 
     const cached = await getCache(cacheKey);
     if (cached) return res.json(cached);
 
-    const where = { status: "ACTIVE" };
+    const where = {
+      status: "ACTIVE",
+      [sectionField]: sectionValue,
+    };
+    const orderBy = getAdsOrderBy(req.query);
 
-    if (type === "category") where.categoryId = Number(value);
-    if (type === "city") where.city_id = Number(value);
-    if (type === "governorate") where.governorate_id = Number(value);
-    if (type === "compound") where.compound_id = Number(value);
+    if (table_id) {
+      const prismaModel = getModel(table_id);
 
-    const [ads, total] = await Promise.all([
-      prisma.D_Vacation_Rent.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: { created_at: "desc" },
-        include: adIncludeListRelations,
+      if (!prismaModel) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid table_id",
+        });
+      }
+
+      const [ads, total] = await Promise.all([
+        prismaModel.findMany({
+          where,
+          skip,
+          take: limit,
+          orderBy,
+          include: adIncludeListRelations,
+        }),
+        prismaModel.count({ where }),
+      ]);
+
+      const data = await enrichAds(ads, userId, "list");
+
+      const response = {
+        success: true,
+        data,
+        pagination: {
+          total,
+          page,
+          limit,
+          totalPages: Math.ceil(total / limit),
+        },
+      };
+
+      await setCache(cacheKey, response, 60);
+
+      return res.json(response);
+    }
+
+    const tables = getAvailableAdTables();
+    const takePerTable = skip + limit;
+
+    const tableResults = await Promise.all(
+      tables.map(async ({ prismaModel }) => {
+        const [records, count] = await Promise.all([
+          prismaModel.findMany({
+            where,
+            take: takePerTable,
+            orderBy,
+            include: adIncludeListRelations,
+          }),
+          prismaModel.count({ where }),
+        ]);
+
+        return { records, count };
       }),
-      prisma.D_Vacation_Rent.count({ where }),
-    ]);
+    );
 
-    const data = await enrichAds(ads, req.user?.id, "list");
+    const total = tableResults.reduce((sum, result) => sum + result.count, 0);
+    const ads = tableResults
+      .flatMap((result) => result.records)
+      .sort(compareAds(req.query))
+      .slice(skip, skip + limit);
+
+    const data = await enrichAds(ads, userId, "list");
 
     const response = {
+      success: true,
       data,
       pagination: {
         total,
@@ -1102,7 +1366,6 @@ exports.toggleFavorite = async (req, res) => {
     });
   }
 };
-
 exports.getFavorites = async (req, res) => {
   try {
     const userId = req.user.id;
