@@ -1568,6 +1568,7 @@ model D_Commercial_Rent {
   @@index([status, categoryId, price, city_id])
   @@index([status, subCategoryId, price, city_id])
 }
+
 model D_Buildings_And_Lands_Sale {
   id       Int      @id @default(autoincrement())
   table_id Int
