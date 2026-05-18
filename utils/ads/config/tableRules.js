@@ -28,8 +28,9 @@ const propertyAmenities = [
   "am_gym",
 ];
 const vacationAmenities = ["am_seeview", "am_pool"];
+
 const buildingsLandsRequired = ["area_m2", "land_type", "usage_type"];
-const buildingsLandsOptional = ["floors", "building_condition"];
+const buildingsLandsOptional = ["floors", "*"];
 
 module.exports = {
   // ================= VACATION =================

@@ -121,7 +121,7 @@ async function getActiveAdsCount(userId) {
   return prisma.D_Vacation_Rent.count({
     where: {
       status: "ACTIVE",
-      OR: [{ admin_id: userId }, { subuser_id: userId }],
+      OR: [{ admin_id: userId }, { user_id: userId }],
     },
   });
 }
@@ -311,14 +311,20 @@ exports.refreshToken = async (req, res) => {
     // ================= VERIFY TOKEN =================
     const decoded = jwt.verify(token, process.env.JWT_REFRESH_SECRET);
 
+    
+
     // ================= FIND TOKEN =================
     const validToken = await prisma.RefreshToken.findUnique({
       where: {
         token,
       },
     });
+    console.log(decoded);
 
-    if (!validToken || validToken.userId !== decoded.id) {
+    console.log(validToken);
+    
+
+    if (!validToken || validToken.user_id !== decoded.id) {
       return res.status(403).json({
         message: "Invalid refresh token",
       });
@@ -1007,10 +1013,10 @@ exports.getAllUsers = async (req, res) => {
     const userIds = users.map((u) => u.id);
 
     const activeAdsCounts = await prisma.D_Vacation_Rent.groupBy({
-      by: ["admin_id", "subuser_id"],
+      by: ["admin_id", "user_id"],
       where: {
         status: "ACTIVE",
-        OR: [{ admin_id: { in: userIds } }, { subuser_id: { in: userIds } }],
+        OR: [{ admin_id: { in: userIds } }, { user_id: { in: userIds } }],
       },
       _count: { id: true },
     });
@@ -1021,8 +1027,8 @@ exports.getAllUsers = async (req, res) => {
     activeAdsCounts.forEach((c) => {
       if (c.admin_id)
         countsMap[c.admin_id] = (countsMap[c.admin_id] || 0) + c._count.id;
-      if (c.subuser_id)
-        countsMap[c.subuser_id] = (countsMap[c.subuser_id] || 0) + c._count.id;
+      if (c.user_id)
+        countsMap[c.user_id] = (countsMap[c.user_id] || 0) + c._count.id;
     });
     const serializedUsers = await Promise.all(
       users.map(async (u) => {
