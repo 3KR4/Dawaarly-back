@@ -27,5 +27,6 @@ module.exports = {
     "payment_no2",
     "is_verified",
     "reject_reason",
+    "featured_priority",
   ],
 };

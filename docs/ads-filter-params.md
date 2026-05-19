@@ -65,14 +65,44 @@ Dynamic params when `table_id` is sent:
 | bedrooms | number | 1, 2, 3, 4, 5, 6. |
 | bathrooms | number | 1, 2, 3, 4, 5, 6. |
 | level | number | 1, 2, 3, 4, 5, 6. |
-| am_pool | boolean | 1, 2. |
-| am_balcony | boolean | 1, 2, 3, 4, 5, 6, 7, 8. |
-| am_private_garden | boolean | 1, 2, 3, 4, 5, 6, 7, 8. |
-| am_kitchen | boolean | 1, 2, 3, 4, 5, 6, 7, 8. |
+| am_balcony | boolean | 1, 2, 3, 4, 5, 6. |
+| am_private_garden | boolean | 1, 2, 3, 4, 5, 6. |
+| am_private_roof | boolean | 1, 2, 3, 4, 5, 6. |
+| am_kitchen | boolean | 1, 2, 3, 4, 5, 6. |
 | am_ac | boolean | 1, 2, 3, 4, 5, 6, 7, 8. |
+| am_central_ac | boolean | 1, 2, 3, 4, 5, 6, 7, 8. |
 | am_heating | boolean | 1, 2, 3, 4, 5, 6, 7, 8. |
-| am_elevator | boolean | 1, 2, 3, 4, 5, 6, 7, 8. |
-| am_gym | boolean | 1, 2, 3, 4, 5, 6, 7, 8. |
+| am_elevator | boolean | 1, 2, 3, 4, 7, 8, 9, 10. |
+| am_security | boolean | 1, 2, 3, 4, 5, 6, 7, 8, 9, 10. |
+| am_parking | boolean | 1, 2, 3, 4, 5, 6, 7, 8, 9, 10. |
+| am_gas | boolean | 1, 2, 3, 4, 5, 6, 7, 8, 9, 10. |
+| am_water | boolean | 1, 2, 3, 4, 5, 6, 7, 8, 9, 10. |
+| am_electricity | boolean | 1, 2, 3, 4, 5, 6, 7, 8, 9, 10. |
+| am_storage_room | boolean | 1, 2, 7, 8. |
+| am_laundry_room | boolean | 1, 2. |
+| am_furnished | boolean | 1, 2. |
+| am_gym | boolean | 1, 2, 3, 4, 5, 6. |
+| am_pool | boolean | 1, 2, 3, 4, 5, 6. |
+| am_seeview | boolean | 1, 2. |
+| am_lakeview | boolean | 1, 2. |
+| am_beach_access | boolean | 1, 2. |
+| am_clubhouse | boolean | 1, 2. |
+| am_kids_area | boolean | 1, 2. |
+| am_bbq_area | boolean | 1, 2, 5, 6. |
+| am_private_parking | boolean | 5, 6. |
+| am_driver_room | boolean | 5, 6. |
+| am_maid_room | boolean | 5, 6. |
+| am_jacuzzi | boolean | 5, 6. |
+| am_meetings_room | boolean | 7, 8. |
+| am_reception | boolean | 7, 8. |
+| am_fire_system | boolean | 7, 8, 9, 10. |
+| am_backup_generator | boolean | 7, 8, 9, 10. |
+| am_loading_area | boolean | 7, 8. |
+| am_corner_plot | boolean | 9, 10. |
+| am_main_street | boolean | 9, 10. |
+| am_fenced | boolean | 9, 10. |
+| am_paved_road | boolean | 9, 10. |
+| am_building_permit | boolean | 9, 10. |
 
 Example:
 

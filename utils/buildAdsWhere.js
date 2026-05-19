@@ -37,6 +37,20 @@ const getAllowedDynamicFields = (tableId) => {
   return new Set([...(rules.required || []), ...(rules.allowed || [])]);
 };
 
+const getAmenityFields = () => {
+  const amenities = new Set();
+
+  Object.values(tableRules).forEach((rules) => {
+    [...(rules.required || []), ...(rules.allowed || [])].forEach((field) => {
+      if (field.startsWith("am_")) amenities.add(field);
+    });
+  });
+
+  return [...amenities];
+};
+
+const amenityFields = getAmenityFields();
+
 const buildAdsWhere = (query, isAdmin, options = {}) => {
   const tableId = Number(query.table_id) || null;
   const includeDynamic = options.includeDynamic ?? Boolean(tableId);
@@ -76,16 +90,7 @@ const buildAdsWhere = (query, isAdmin, options = {}) => {
       if (dynamicFields.has(field)) addExactNumber(filters, field, query[field]);
     });
 
-    [
-      "am_pool",
-      "am_balcony",
-      "am_private_garden",
-      "am_kitchen",
-      "am_ac",
-      "am_heating",
-      "am_elevator",
-      "am_gym",
-    ].forEach((field) => {
+    amenityFields.forEach((field) => {
       if (dynamicFields.has(field)) addBoolean(filters, field, query[field]);
     });
   }

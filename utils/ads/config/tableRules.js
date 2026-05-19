@@ -17,17 +17,106 @@ const commonSaleOptional = ["down_payment", "installment_years"];
 const propertyDetails = ["bedrooms", "bathrooms", "level", "area_m2"];
 
 
-//! Amenities
-const propertyAmenities = [
+const apartmentAmenities = [
   "am_balcony",
   "am_private_garden",
+  "am_private_roof",
   "am_kitchen",
   "am_ac",
+  "am_central_ac",
   "am_heating",
   "am_elevator",
+  "am_security",
+  "am_parking",
+  "am_gas",
+  "am_water",
+  "am_electricity",
   "am_gym",
+  "am_pool",
 ];
-const vacationAmenities = ["am_seeview", "am_pool"];
+
+const vacationAmenities = [
+  "am_balcony",
+  "am_private_garden",
+  "am_private_roof",
+  "am_kitchen",
+  "am_ac",
+  "am_central_ac",
+  "am_heating",
+  "am_elevator",
+  "am_security",
+  "am_parking",
+  "am_gas",
+  "am_water",
+  "am_electricity",
+  "am_storage_room",
+  "am_laundry_room",
+  "am_furnished",
+  "am_gym",
+  "am_pool",
+  "am_seeview",
+  "am_lakeview",
+  "am_beach_access",
+  "am_clubhouse",
+  "am_kids_area",
+  "am_bbq_area",
+];
+
+const villaAmenities = [
+  "am_balcony",
+  "am_private_garden",
+  "am_private_roof",
+  "am_kitchen",
+  "am_ac",
+  "am_central_ac",
+  "am_heating",
+  "am_security",
+  "am_parking",
+  "am_private_parking",
+  "am_driver_room",
+  "am_maid_room",
+  "am_gas",
+  "am_water",
+  "am_electricity",
+  "am_gym",
+  "am_pool",
+  "am_jacuzzi",
+  "am_bbq_area",
+];
+
+const commercialAmenities = [
+  "am_ac",
+  "am_central_ac",
+  "am_heating",
+  "am_elevator",
+  "am_security",
+  "am_parking",
+  "am_gas",
+  "am_water",
+  "am_electricity",
+  "am_meetings_room",
+  "am_reception",
+  "am_fire_system",
+  "am_backup_generator",
+  "am_loading_area",
+  "am_storage_room",
+];
+
+const landBuildingAmenities = [
+  "am_security",
+  "am_parking",
+  "am_gas",
+  "am_water",
+  "am_electricity",
+  "am_corner_plot",
+  "am_main_street",
+  "am_fenced",
+  "am_paved_road",
+  "am_building_permit",
+  "am_elevator",
+  "am_fire_system",
+  "am_backup_generator",
+];
 
 const buildingsLandsRequired = ["area_m2", "land_type", "usage_type"];
 const buildingsLandsOptional = ["floors", "*"];
@@ -40,7 +129,6 @@ module.exports = {
 
     allowed: [
       ...commonSaleOptional,
-      ...propertyAmenities,
       ...vacationAmenities,
     ],
   },
@@ -51,7 +139,6 @@ module.exports = {
 
     allowed: [
       ...commonRentOptional,
-      ...propertyAmenities,
       ...vacationAmenities,
     ],
   },
@@ -62,14 +149,14 @@ module.exports = {
   3: {
     required: [...propertyDetails, ...commonSaleRequired],
 
-    allowed: [...commonSaleOptional, ...propertyAmenities],
+    allowed: [...commonSaleOptional, ...apartmentAmenities],
   },
 
   // 4 - Apartment Rent
   4: {
     required: [...commonRentRequired, ...propertyDetails],
 
-    allowed: [...commonRentOptional, ...propertyAmenities],
+    allowed: [...commonRentOptional, ...apartmentAmenities],
   },
 
   // ================= VILLA =================
@@ -78,14 +165,14 @@ module.exports = {
   5: {
     required: [...propertyDetails, ...commonSaleRequired],
 
-    allowed: [...commonSaleOptional, ...propertyAmenities],
+    allowed: [...commonSaleOptional, ...villaAmenities],
   },
 
   // 6 - Villa Rent
   6: {
     required: [...commonRentRequired, ...propertyDetails],
 
-    allowed: [...commonRentOptional, ...propertyAmenities],
+    allowed: [...commonRentOptional, ...villaAmenities],
   },
 
   // ================= COMMERCIAL =================
@@ -94,14 +181,14 @@ module.exports = {
   7: {
     required: [...commonSaleRequired.filter((item) => item !== "furnished")],
 
-    allowed: [...commonSaleOptional, "area_m2", ...propertyAmenities],
+    allowed: [...commonSaleOptional, "area_m2", ...commercialAmenities],
   },
 
   // 8 - Commercial Rent
   8: {
     required: [...commonRentRequired],
 
-    allowed: [...commonRentOptional, "area_m2", ...propertyAmenities],
+    allowed: [...commonRentOptional, "area_m2", ...commercialAmenities],
   },
 
   // ================= BUILDINGS & LANDS =================
@@ -110,7 +197,7 @@ module.exports = {
   9: {
     required: [...buildingsLandsRequired, "payment_method"],
 
-    allowed: [...commonSaleOptional, ...buildingsLandsOptional],
+    allowed: [...commonSaleOptional, ...landBuildingAmenities, ...buildingsLandsOptional],
   },
 
   // 10 - Buildings & Lands Rent
@@ -120,6 +207,11 @@ module.exports = {
       ...buildingsLandsRequired,
     ],
 
-    allowed: [...commonRentOptional, "adult_no_max", ...buildingsLandsOptional],
+    allowed: [
+      ...commonRentOptional,
+      "adult_no_max",
+      ...landBuildingAmenities,
+      ...buildingsLandsOptional,
+    ],
   },
 };

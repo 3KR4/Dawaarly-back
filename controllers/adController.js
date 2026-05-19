@@ -965,10 +965,7 @@ exports.getAd = async (req, res) => {
 
     const enriched = await enrichAds(ad, userId, "detail");
 
-    return res.json({
-      success: true,
-      data: enriched[0],
-    });
+    return res.json(enriched[0]);
   } catch (err) {
     return res.status(500).json({
       success: false,
