@@ -10,7 +10,7 @@ exports.sendVerificationEmail = async (to, code) => {
       subject: "Verify your email",
 
       html: `
-       <!DOCTYPE html>
+      <!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8" />

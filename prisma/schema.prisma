@@ -1821,7 +1821,7 @@ model D_Buildings_And_Lands_Rent {
   floors             Int?
   building_condition BuildingCondition?
   land_type          LandType?
-  usage_type          BuildingUsagesType?
+  usage_type         BuildingUsagesType?
 
   am_security         Boolean @default(false)
   am_parking          Boolean @default(false)

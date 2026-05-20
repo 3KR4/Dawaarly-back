@@ -294,6 +294,53 @@ const compareAds = (query) => {
   };
 };
 
+const trackAdView = async ({ prismaModel, entityId, tableId, userId, ip }) => {
+  const updatedAd = await prismaModel.update({
+    where: { id: entityId },
+    data: {
+      views_count: { increment: 1 },
+    },
+    select: {
+      views_count: true,
+      reach_count: true,
+    },
+  });
+
+  let reach_count = updatedAd.reach_count;
+
+  try {
+    await prisma.AdReach.create({
+      data: {
+        entity_id: entityId,
+        table_id: tableId,
+        user_id: userId || null,
+        ip_address: userId ? null : ip,
+      },
+    });
+
+    const reachedAd = await prismaModel.update({
+      where: { id: entityId },
+      data: {
+        reach_count: { increment: 1 },
+      },
+      select: {
+        reach_count: true,
+      },
+    });
+
+    reach_count = reachedAd.reach_count;
+  } catch (err) {
+    if (err.code !== "P2002") {
+      throw err;
+    }
+  }
+
+  return {
+    views_count: updatedAd.views_count,
+    reach_count,
+  };
+};
+
 const getAvailableAdTables = () =>
   Object.keys(tableRegistry)
     .map(Number)
@@ -719,6 +766,10 @@ exports.changeAdStatus = async (req, res) => {
       },
     });
 
+    await deleteCachePattern("ads:list:*");
+    await deleteCachePattern("userAds:*");
+    await deleteCachePattern("sections:*");
+
     return res.json({
       success: true,
       message: `Ad status updated to ${status}`,
@@ -962,8 +1013,15 @@ exports.getAd = async (req, res) => {
     }
 
     const userId = req.user?.id || null;
+    const stats = await trackAdView({
+      prismaModel,
+      entityId: adId,
+      tableId: table_id,
+      userId,
+      ip: req.ip,
+    });
 
-    const enriched = await enrichAds(ad, userId, "detail");
+    const enriched = await enrichAds({ ...ad, ...stats }, userId, "detail");
 
     return res.json(enriched[0]);
   } catch (err) {
@@ -1294,8 +1352,10 @@ exports.toggleFavorite = async (req, res) => {
     // =========================
     // TOGGLE
     // =========================
+    let updatedAd;
+
     if (existing) {
-      await prisma.$transaction([
+      const [, adAfterFavorite] = await prisma.$transaction([
         prisma.AdFavorite.delete({
           where: {
             entity_id_table_id_user_id: {
@@ -1316,8 +1376,10 @@ exports.toggleFavorite = async (req, res) => {
           },
         }),
       ]);
+
+      updatedAd = adAfterFavorite;
     } else {
-      await prisma.$transaction([
+      const [, adAfterFavorite] = await prisma.$transaction([
         prisma.AdFavorite.create({
           data: {
             entity_id,
@@ -1336,6 +1398,8 @@ exports.toggleFavorite = async (req, res) => {
           },
         }),
       ]);
+
+      updatedAd = adAfterFavorite;
     }
 
     // =========================
@@ -1351,7 +1415,8 @@ exports.toggleFavorite = async (req, res) => {
     // =========================
     return res.json({
       success: true,
-
+      isFavorite: !existing,
+      favorites_count: updatedAd.favorites_count,
       message: existing ? "Removed from favorites" : "Added to favorites",
     });
   } catch (err) {
