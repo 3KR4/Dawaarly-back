@@ -7,10 +7,10 @@ const {
   updateImage
 } = require("../controllers/ImagesController");
 const multer = require("multer");
-const upload = multer(); // استخدام memoryStorage لرفع الصور مباشرة
+const upload = multer();
 
 router.post(
-  "/:entity_type/:entity_id",
+  "/:entity_type/:table_id/:entity_id",
   authenticate,
   upload.array("files"),
   uploadImages,

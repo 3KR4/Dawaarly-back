@@ -1,20 +1,15 @@
 const { PrismaClient } = require("@prisma/client");
+
 const prisma = new PrismaClient();
 const cloudinary = require("../utils/cloudinary");
 const buildAdsWhere = require("../utils/buildAdsWhere");
 const { pagination } = require("../utils/pagination");
 const { getCache, setCache, deleteCachePattern } = require("../utils/redis");
 const { validateAdDates } = require("../utils/validation");
+const tableRegistry = require("../utils/ads/config/tableRegistry");
+
 const adIncludeRelations = {
-  admin: {
-    select: {
-      id: true,
-      full_name: true,
-      email: true,
-      phone: true,
-    },
-  },
-  subuser: {
+  user: {
     select: {
       id: true,
       full_name: true,
@@ -24,22 +19,46 @@ const adIncludeRelations = {
       facebook_link: true,
     },
   },
-  Categories: true,
-  SubCategories: true,
+
+  admin: {
+    select: {
+      id: true,
+      full_name: true,
+      email: true,
+    },
+  },
+
+  table: {
+    select: {
+      id: true,
+      name_ar: true,
+      name_en: true,
+    },
+  },
+  category: true,
+  subCategory: true,
+
   country: true,
   governorate: true,
   city: true,
   area: true,
   compound: true,
-  Booking: true,
 };
 const adIncludeListRelations = {
   city: true,
   governorate: true,
   area: true,
   compound: true,
-  Categories: true,
-  SubCategories: true,
+
+  table: {
+    select: {
+      id: true,
+      name_ar: true,
+      name_en: true,
+    },
+  },
+  category: true,
+  subCategory: true,
 };
 function formatListAd(ad) {
   const firstImage =
@@ -48,18 +67,20 @@ function formatListAd(ad) {
   return {
     id: ad.id,
     title: ad.title,
-    rent_amount: ad.rent_amount,
+    price: ad.price,
     deposit_amount: ad.deposit_amount,
-    rent_currency: ad.rent_currency,
+    currency: ad.currency,
     rent_frequency: ad.rent_frequency,
     status: ad.status,
+    is_verified: ad.is_verified,
     created_at: ad.created_at,
+    table: ad.table,
     city: ad.city,
     governorate: ad.governorate,
     area: ad.area,
     compound: ad.compound,
-    Categories: ad.Categories,
-    SubCategories: ad.SubCategories,
+    category: ad.category,
+    subCategory: ad.subCategory,
     views_count: ad.views_count,
     reach_count: ad.reach_count,
     favorites_count: ad.favorites_count,
@@ -97,238 +118,521 @@ function formatDetailAd(ad) {
 }
 async function enrichAds(ads, userId = null, mode = "list") {
   if (!ads) return null;
-  if (!Array.isArray(ads)) ads = [ads];
 
-  const adIds = ads.map((a) => a.id);
+  if (!Array.isArray(ads)) {
+    ads = [ads];
+  }
 
-  const [images, favorites] = await Promise.all([
-    prisma.Images.findMany({
-      where: { entity_type: "AD", entity_id: { in: adIds } },
-    }),
-    userId
-      ? prisma.AdFavorite.findMany({
-          where: { user_id: userId, ad_id: { in: adIds } },
-        })
-      : [],
-  ]);
+  const groupedByTable = {};
 
-  // 🔥 نحول الصور لـ map مرة واحدة
+  for (const ad of ads) {
+    if (!groupedByTable[ad.table_id]) {
+      groupedByTable[ad.table_id] = [];
+    }
+
+    groupedByTable[ad.table_id].push(ad.id);
+  }
+
+  let images = [];
+  let favorites = [];
+
+  // =========================
+  // LOAD DATA
+  // =========================
+  for (const table_id in groupedByTable) {
+    const ids = groupedByTable[table_id];
+
+    // =========================
+    // DETAIL => ALL IMAGES
+    // LIST => COVER ONLY
+    // =========================
+    const tableImages = await prisma.images.findMany({
+      where: {
+        table_id: Number(table_id),
+
+        entity_id: {
+          in: ids,
+        },
+
+        ...(mode === "list" && {
+          is_cover: true,
+        }),
+      },
+
+      orderBy: {
+        order: "asc",
+      },
+    });
+
+    images.push(...tableImages);
+
+    // =========================
+    // FAVORITES
+    // =========================
+    if (userId) {
+      const tableFavorites = await prisma.adFavorite.findMany({
+        where: {
+          user_id: userId,
+
+          table_id: Number(table_id),
+
+          entity_id: {
+            in: ids,
+          },
+        },
+      });
+
+      favorites.push(...tableFavorites);
+    }
+  }
+
+  // =========================
+  // IMAGE MAP
+  // =========================
   const imageMap = images.reduce((acc, img) => {
-    if (!acc[img.entity_id]) acc[img.entity_id] = [];
-    acc[img.entity_id].push(img);
+    const key = `${img.table_id}_${img.entity_id}`;
+
+    if (!acc[key]) {
+      acc[key] = [];
+    }
+
+    acc[key].push(img);
+
     return acc;
   }, {});
 
-  // 🔥 نحول favorites لـ Set (سريع جداً)
-  const favoriteSet = new Set(favorites.map((f) => Number(f.ad_id)));
+  // =========================
+  // FAVORITES SET
+  // =========================
+  const favoriteSet = new Set(
+    favorites.map((f) => `${f.table_id}_${f.entity_id}`),
+  );
 
+  // =========================
+  // BUILD RESPONSE
+  // =========================
   return ads.map((ad) => {
-    const adImages = imageMap[ad.id] || [];
+    const key = `${ad.table_id}_${ad.id}`;
 
-    const isFav = favoriteSet.has(Number(ad.id));
+    const adImages = imageMap[key] || [];
+
+    const isFav = favoriteSet.has(key);
 
     const formatted =
       mode === "detail"
-        ? formatDetailAd(ad)
-        : formatListAd({ ...ad, images: adImages });
+        ? formatDetailAd({ ...ad, images: adImages })
+        : formatListAd({
+            ...ad,
+            image: adImages[0] || null,
+          });
+
+    const { table_id, table, ...responseAd } = formatted;
 
     return {
-      ...formatted,
-      images: adImages,
+      ...responseAd,
+
+      department: table || {
+        id: ad.table_id,
+        name_ar: null,
+        name_en: null,
+      },
+
+      ...(mode === "detail" && {
+        images: adImages,
+      }),
+
+      ...(mode === "list" && {
+        image: adImages[0] || null,
+      }),
+
       isFavorite: isFav,
     };
   });
 }
+const validateCreateAd = require("../utils/ads/validators/validateCreateAd");
+const getModel = require("../utils/ads/services/getModel");
+const validateUpdateAd = require("../utils/ads/validators/validateUpdateAd");
+
+const getAdsOrderBy = (query) => {
+  const sort = query.sort || query.sort_by;
+  const order = query.order === "asc" ? "asc" : "desc";
+
+  const orderBy = [{ featured_priority: "desc" }];
+
+  if (sort === "top_views" || sort === "views" || sort === "views_desc") {
+    orderBy.push({ views_count: "desc" }, { created_at: "desc" });
+  } else if (sort === "date_asc" || (sort === "date" && order === "asc")) {
+    orderBy.push({ created_at: "asc" });
+  } else {
+    orderBy.push({ created_at: "desc" });
+  }
+
+  return orderBy;
+};
+
+const compareAds = (query) => {
+  const sort = query.sort || query.sort_by;
+  const order = query.order === "asc" ? "asc" : "desc";
+
+  return (a, b) => {
+    const priorityDiff = Number(b.featured_priority || 0) - Number(a.featured_priority || 0);
+    if (priorityDiff !== 0) return priorityDiff;
+
+    if (sort === "top_views" || sort === "views" || sort === "views_desc") {
+      const viewsDiff = Number(b.views_count || 0) - Number(a.views_count || 0);
+      if (viewsDiff !== 0) return viewsDiff;
+    }
+
+    const aDate = new Date(a.created_at).getTime();
+    const bDate = new Date(b.created_at).getTime();
+
+    if (sort === "date_asc" || (sort === "date" && order === "asc")) {
+      return aDate - bDate;
+    }
+
+    return bDate - aDate;
+  };
+};
+
+const trackAdView = async ({ prismaModel, entityId, tableId, userId, ip }) => {
+  const updatedAd = await prismaModel.update({
+    where: { id: entityId },
+    data: {
+      views_count: { increment: 1 },
+    },
+    select: {
+      views_count: true,
+      reach_count: true,
+    },
+  });
+
+  let reach_count = updatedAd.reach_count;
+
+  try {
+    await prisma.AdReach.create({
+      data: {
+        entity_id: entityId,
+        table_id: tableId,
+        user_id: userId || null,
+        ip_address: userId ? null : ip,
+      },
+    });
+
+    const reachedAd = await prismaModel.update({
+      where: { id: entityId },
+      data: {
+        reach_count: { increment: 1 },
+      },
+      select: {
+        reach_count: true,
+      },
+    });
+
+    reach_count = reachedAd.reach_count;
+  } catch (err) {
+    if (err.code !== "P2002") {
+      throw err;
+    }
+  }
+
+  return {
+    views_count: updatedAd.views_count,
+    reach_count,
+  };
+};
+
+const getAvailableAdTables = () =>
+  Object.keys(tableRegistry)
+    .map(Number)
+    .map((table_id) => ({ table_id, prismaModel: getModel(table_id) }))
+    .filter((entry) => entry.prismaModel);
+
+const sectionFieldByType = {
+  gov: "governorate_id",
+  governorate: "governorate_id",
+  city: "city_id",
+  area: "area_id",
+  compound: "compound_id",
+  compounds: "compound_id",
+  category: "categoryId",
+  subCategory: "subCategoryId",
+  sub_category: "subCategoryId",
+  subcategory: "subCategoryId",
+};
+
+const specificTableSectionTypes = new Set([
+  "category",
+  "subCategory",
+  "sub_category",
+  "subcategory",
+]);
+
+const normalizeBoolean = (value) =>
+  value === true || value === "true" || value === 1 || value === "1";
+
 exports.createAd = async (req, res) => {
   try {
     const data = req.body;
 
-    console.log(data);
+    // =========================
+    // TABLE ID
+    // =========================
+    const table_id = Number(req.params.table_id);
 
-    const requiredFields = [
-      "title",
-      "categoryId",
-      "country_id",
-      "governorate_id",
-      "city_id",
-      "rent_frequency",
-      "rent_currency",
-      "deposit_amount",
-      "rent_amount",
-      "bedrooms",
-      "bathrooms",
-      "level",
-    ];
+    // inject table_id
+    data.table_id = table_id;
 
-    const missing = requiredFields.filter(
-      (f) => data[f] === undefined || data[f] === null,
-    );
+    // =========================
+    // VALIDATION
+    // =========================
+    const validation = validateCreateAd(data);
 
-    if (missing.length) {
-      return res.status(400).json({ message: "Missing fields", missing });
+    if (validation.error) {
+      return res.status(400).json(validation);
     }
 
-    if (data.available_from && data.available_to) {
-      if (!validateAdDates(data.available_from, data.available_to)) {
-        return res.status(400).json({ message: "Invalid dates" });
-      }
+    const prismaModel = getModel(table_id);
+
+    if (!prismaModel) {
+      return res.status(400).json({
+        message: `Model ${prismaModel} not found`,
+      });
     }
 
+    // =========================
+    // USER DATA
+    // =========================
     const user = req.user;
 
-    const userData =
-      user.user_type === "ADMIN"
-        ? { admin_id: user.id }
-        : user.user_type === "SUBUSER"
-          ? { subuser_id: user.id }
-          : {};
-
+    // =========================
+    // STATUS LOGIC
+    // =========================
     const isAdmin =
-      user?.is_super_admin || user?.permissions?.includes("create-ads");
+      user?.is_super_admin || user?.permissions?.includes("CREATE_AD");
 
-    const status = isAdmin ? "ACTIVE" : "PENDING";  
+    const status = isAdmin ? "ACTIVE" : "PENDING";
 
-    const ad = await prisma.D_Vacation.create({
+    // =========================
+    // BUILD CREATE DATA
+    // =========================
+    const createData = {
+      ...data,
+
+      table_id,
+      user_id: isAdmin ? null : user.id,
+      admin_id: isAdmin ? user.id : null,
+      status,
+      is_verified: isAdmin,
+
+      status_changed_at: isAdmin ? new Date() : null,
+    };
+
+    // =========================
+    // DATE CASTING
+    // =========================
+    if (data.available_from) {
+      createData.available_from = new Date(data.available_from);
+    }
+
+    if (data.available_to) {
+      createData.available_to = new Date(data.available_to);
+    }
+
+    // =========================
+    // CREATE AD
+    // =========================
+    const ad = await prismaModel.create({
+      data: createData,
+    });
+
+    // =========================
+    // RESPONSE
+    // =========================
+    return res.status(201).json({
+      success: true,
+      message: "Ad created successfully",
       data: {
-        ...data,
-        ...userData,
-        status,
-        status_changed_at: isAdmin ? new Date() : null,
+        id: ad.id,
+        table_id,
+        status: ad.status,
       },
     });
-    await deleteCachePattern("ads:list:*");
-    await deleteCachePattern("sections:*");
-    res.status(201).json({ message: "Ad created", adId: ad.id });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    console.log(err);
+
+    return res.status(500).json({
+      success: false,
+      message: err.message,
+    });
   }
-};
-const buildUpdateData = (body) => {
-  const fields = [
-    "title",
-    "description",
-    "categoryId",
-    "subCategoryId",
-    "display_phone",
-    "display_whatsapp",
-    "Owner_No1",
-    "Owner_No2",
-    "delivery_no1 ",
-    "delivery_no1",
-    "payment_no1",
-    "payment_no2",
-    "rent_amount",
-    "rent_currency",
-    "rent_frequency",
-    "deposit_amount",
-    "min_rent_period",
-    "min_rent_period_unit",
-    "country_id",
-    "governorate_id",
-    "city_id",
-    "area_id",
-    "compound_id",
-    "bedrooms",
-    "bathrooms",
-    "level",
-    "adult_no_max",
-    "child_no_max",
-    "am_seeview",
-    "am_pool",
-    "am_balcony",
-    "am_private_garden",
-    "am_kitchen",
-    "am_ac",
-    "am_heating",
-    "am_elevator",
-    "am_gym",
-    "tags",
-  ];
-
-  const data = {};
-
-  fields.forEach((f) => {
-    if (body[f] !== undefined) {
-      data[f] = body[f];
-    }
-  });
-
-  if (body.available_from) data.available_from = new Date(body.available_from);
-
-  if (body.available_to) data.available_to = new Date(body.available_to);
-
-  return data;
 };
 exports.updateAd = async (req, res) => {
   try {
     const adId = Number(req.params.adId);
+    const table_id = Number(req.params.table_id);
 
-    const ad = await prisma.D_Vacation.findUnique({
+    const prismaModel = getModel(table_id);
+
+    if (!prismaModel) {
+      return res.status(400).json({
+        message: `Model ${table.model} not found`,
+      });
+    }
+
+    // =========================
+    // GET AD
+    // =========================
+
+    const ad = await prismaModel.findUnique({
       where: { id: adId },
     });
 
     if (!ad) {
-      return res.status(404).json({ message: "Ad not found" });
+      return res.status(404).json({
+        message: `Ad ${adId} not found`,
+      });
     }
 
+    // =========================
+    // AUTH
+    // =========================
     const user = req.user;
 
     const isAdmin =
       user?.permissions?.includes("EDIT_AD") || user?.is_super_admin;
 
-    const isOwner = ad.admin_id === user.id || ad.subuser_id === user.id;
+    const isOwner = ad.user_id === user.id;
 
     if (!isAdmin && !isOwner) {
-      return res.status(403).json({ message: "Access denied" });
+      return res.status(403).json({
+        message: "Access denied",
+      });
     }
 
-    const dataToUpdate = buildUpdateData(req.body);
+    // =========================
+    // VALIDATION
+    // =========================
+    const validation = validateUpdateAd(req.body, table_id);
 
+    if (validation.error) {
+      return res.status(400).json(validation);
+    }
+
+    // =========================
+    // BUILD UPDATE DATA
+    // =========================
+    const dataToUpdate = {
+      ...req.body,
+    };
+
+    // date casting
+    if (req.body.available_from) {
+      dataToUpdate.available_from = new Date(req.body.available_from);
+    }
+
+    if (req.body.available_to) {
+      dataToUpdate.available_to = new Date(req.body.available_to);
+    }
+
+    if (isAdmin && req.body.is_verified !== undefined) {
+      dataToUpdate.is_verified = normalizeBoolean(req.body.is_verified);
+    }
+
+    // pending after edit
     if (!isAdmin && ad.status === "ACTIVE") {
       dataToUpdate.status = "PENDING";
       dataToUpdate.was_previously_approved = true;
     }
 
-    const updatedAd = await prisma.D_Vacation.update({
+    // prevent changing protected fields
+    delete dataToUpdate.id;
+    delete dataToUpdate.user_id;
+
+    if (!isAdmin) {
+      delete dataToUpdate.is_verified;
+    }
+
+    // =========================
+    // UPDATE
+    // =========================
+    const updatedAd = await prismaModel.update({
       where: { id: adId },
       data: dataToUpdate,
     });
+
+    // =========================
+    // CACHE
+    // =========================
     await deleteCachePattern("ads:list:*");
     await deleteCachePattern("userAds:*");
     await deleteCachePattern("sections:*");
-    res.json({
+
+    // =========================
+    // RESPONSE
+    // =========================
+    return res.json({
+      success: true,
       message: "Ad updated successfully",
-      ad: updatedAd,
+      data: updatedAd,
     });
   } catch (err) {
-    res.status(500).json({
-      message: "Server Error",
-      error: err.message,
+    console.log(err);
+
+    return res.status(500).json({
+      success: false,
+      message: err.message,
     });
   }
 };
 exports.deleteAd = async (req, res) => {
   try {
     const adId = Number(req.params.adId);
+    const table_id = Number(req.params.table_id);
 
-    const ad = await prisma.D_Vacation.findUnique({
+    const prismaModel = getModel(table_id);
+
+    if (!prismaModel) {
+      return res.status(400).json({
+        message: `Model ${table.model} not found`,
+      });
+    }
+
+    // =========================
+    // FIND AD
+    // =========================
+    const ad = await prismaModel.findUnique({
       where: { id: adId },
     });
 
-    if (!ad) return res.status(404).json({ message: "Ad not found" });
+    if (!ad) {
+      return res.status(404).json({
+        message: "Ad not found",
+      });
+    }
 
-    const isOwner =
-      ad.admin_id === req.user.id || ad.subuser_id === req.user.id;
+    // =========================
+    // AUTH
+    // =========================
+    const user = req.user;
+
+    const isOwner = ad.user_id === user.id;
 
     const canDelete =
-      req.user.is_super_admin || req.user.permissions?.includes("DELETE_AD");
+      user?.is_super_admin || user?.permissions?.includes("DELETE_AD");
 
-    if (!isOwner && !canDelete)
-      return res.status(403).json({ message: "Access denied" });
+    if (!isOwner && !canDelete) {
+      return res.status(403).json({
+        message: "Access denied",
+      });
+    }
 
+    // =========================
+    // IMAGES
+    // =========================
     const images = await prisma.Images.findMany({
       where: {
         entity_type: "AD",
+        table_id,
         entity_id: adId,
       },
     });
@@ -337,49 +641,87 @@ exports.deleteAd = async (req, res) => {
       images.map((img) => cloudinary.uploader.destroy(img.public_id)),
     );
 
-    await prisma.D_Vacation.delete({
+    // =========================
+    // DELETE
+    // =========================
+    await prismaModel.delete({
       where: { id: adId },
     });
+
+    // =========================
+    // CACHE
+    // =========================
     await deleteCachePattern("ads:list:*");
     await deleteCachePattern("userAds:*");
     await deleteCachePattern("sections:*");
-    res.json({ message: "Ad deleted successfully" });
+
+    // =========================
+    // RESPONSE
+    // =========================
+    return res.json({
+      success: true,
+      message: "Ad deleted successfully",
+    });
   } catch (err) {
     console.log(err);
 
-    res.status(500).json({ message: "Server Error" });
+    return res.status(500).json({
+      success: false,
+      message: err.message,
+    });
   }
 };
 exports.changeAdStatus = async (req, res) => {
   try {
-    const { adId } = req.params;
+    const table_id = Number(req.params.table_id);
+    const adId = Number(req.params.adId);
+
     const { status, reason } = req.body;
 
-    // 🔹 نجيب الإعلان من قاعدة البيانات
-    const ad = await prisma.D_Vacation.findUnique({
-      where: { id: Number(adId) },
+    const prismaModel = getModel(table_id);
+
+    if (!prismaModel) {
+      return res.status(400).json({
+        message: `Model ${table.model} not found`,
+      });
+    }
+
+    // =========================
+    // GET AD
+    // =========================
+    const ad = await prismaModel.findUnique({
+      where: { id: adId },
     });
 
-    if (!ad) return res.status(404).json({ message: "Ad not found" });
+    if (!ad) {
+      return res.status(404).json({ message: "Ad not found" });
+    }
 
-    // 🔹 صلاحيات المستخدم
+    // =========================
+    // AUTH
+    // =========================
     const isAdmin =
       req.user?.is_super_admin ||
       req.user?.permissions?.includes("CHANGE_ADS_STATUS");
 
-    const isOwner =
-      ad.admin_id === req.user.id || ad.subuser_id === req.user.id;
+    const isOwner = ad.user_id === req.user.id;
 
-    // 🔹 الحالات المسموحة
+    // =========================
+    // VALID STATUS
+    // =========================
     const allowedStatuses = ["ACTIVE", "REJECTED", "DISABLED"];
 
     if (!allowedStatuses.includes(status)) {
       return res.status(400).json({ message: "Invalid status" });
     }
 
-    // 🔹 التحقق من الصلاحيات
+    // =========================
+    // AUTH RULES
+    // =========================
     if (!isAdmin) {
-      if (!isOwner) return res.status(403).json({ message: "Access denied" });
+      if (!isOwner) {
+        return res.status(403).json({ message: "Access denied" });
+      }
 
       if (status !== "DISABLED") {
         return res.status(403).json({
@@ -388,45 +730,68 @@ exports.changeAdStatus = async (req, res) => {
       }
     }
 
-    // 🔹 إذا الحالة REJECTED نحتاج السبب
+    // =========================
+    // REJECT LOGIC
+    // =========================
     let reject_reason;
+
     if (status === "REJECTED") {
-      if (!isAdmin)
+      if (!isAdmin) {
         return res.status(403).json({
           message: "Only admin can reject ads",
         });
+      }
 
-      if (!reason)
+      if (!reason) {
         return res.status(400).json({
           message: "Reason required for rejection",
         });
+      }
 
       reject_reason = reason;
     }
 
-    // 🔹 تحديث الإعلان
-    const updatedAd = await prisma.D_Vacation.update({
-      where: { id: Number(adId) },
+    // =========================
+    // UPDATE
+    // =========================
+    const updatedAd = await prismaModel.update({
+      where: { id: adId },
       data: {
         status,
-        ...(reject_reason && { reject_reason }), // فقط لو REJECTED
+        status_changed_at: new Date(),
+
+        ...(reject_reason && {
+          reject_reason,
+        }),
       },
     });
 
-    res.json({
+    await deleteCachePattern("ads:list:*");
+    await deleteCachePattern("userAds:*");
+    await deleteCachePattern("sections:*");
+
+    return res.json({
+      success: true,
       message: `Ad status updated to ${status}`,
-      ad: updatedAd,
+      data: updatedAd,
     });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server Error" });
+    return res.status(500).json({
+      message: "Server Error",
+      error: err.message,
+    });
   }
 };
 exports.assignAdmin = async (req, res) => {
   try {
-    // 🔐 التحقق من الصلاحية أول حاجة
+    const table_id = Number(req.params.table_id);
+    const adId = Number(req.params.adId);
+
     const user = req.user;
 
+    // =========================
+    // AUTH
+    // =========================
     if (
       !user?.is_super_admin &&
       !user?.permissions?.includes("ASSIGN_RESPONSIBILITY")
@@ -436,23 +801,31 @@ exports.assignAdmin = async (req, res) => {
       });
     }
 
-    const adId = Number(req.params.adId);
-    const { admin_id } = req.body;
+    const prismaModel = getModel(table_id);
 
-    // ✅ 1. نسمح بـ null عادي
-    if (admin_id === undefined) {
-      return res.status(400).json({ message: "admin_id field is required" });
+    if (!prismaModel) {
+      return res.status(400).json({
+        message: `Model ${table.model} not found`,
+      });
     }
 
-    // ✅ 2. لو مش null، نتأكد إنه رقم صحيح والأدمن موجود
+    const { admin_id } = req.body;
+
+    if (admin_id === undefined) {
+      return res.status(400).json({ message: "admin_id is required" });
+    }
+
+    // =========================
+    // VALIDATE ADMIN
+    // =========================
     if (admin_id !== null) {
       if (isNaN(admin_id)) {
-        return res
-          .status(400)
-          .json({ message: "admin_id must be a number or null" });
+        return res.status(400).json({
+          message: "admin_id must be number or null",
+        });
       }
 
-      const adminUser = await prisma.users.findUnique({
+      const adminUser = await prisma.Users.findUnique({
         where: { id: admin_id },
       });
 
@@ -461,29 +834,41 @@ exports.assignAdmin = async (req, res) => {
       }
     }
 
-    // 3. التحقق من وجود الإعلان
-    const ad = await prisma.D_Vacation.findUnique({
+    // =========================
+    // GET AD
+    // =========================
+    const ad = await prismaModel.findUnique({
       where: { id: adId },
     });
 
-    if (!ad) return res.status(404).json({ message: "Ad not found" });
+    if (!ad) {
+      return res.status(404).json({ message: "Ad not found" });
+    }
 
-    await prisma.D_Vacation.update({
+    // =========================
+    // UPDATE
+    // =========================
+    await prismaModel.update({
       where: { id: adId },
       data: {
         admin_id,
       },
     });
 
-    res.json({
+    return res.json({
+      success: true,
       message:
         admin_id === null
           ? "Admin removed successfully"
           : "Admin assigned successfully",
     });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server Error" });
+    console.log(err);
+
+    return res.status(500).json({
+      message: "Server Error",
+      error: err.message,
+    });
   }
 };
 exports.getAllAds = async (req, res) => {
@@ -492,14 +877,25 @@ exports.getAllAds = async (req, res) => {
 
     const { page, limit, skip } = pagination(req.query);
     const isAdmin = req.user?.is_super_admin || req.user?.user_type === "ADMIN";
+    const table_id = req.query.table_id ? Number(req.query.table_id) : null;
 
-    const where = buildAdsWhere(req.query, isAdmin);
+    if (req.query.table_id && !table_id) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid table_id",
+      });
+    }
+
+    const where = buildAdsWhere(req.query, isAdmin, {
+      includeDynamic: Boolean(table_id),
+    });
+    const orderBy = getAdsOrderBy(req.query);
 
     const crypto = require("crypto");
 
     const hash = crypto
       .createHash("md5")
-      .update(JSON.stringify(where))
+      .update(JSON.stringify({ query: req.query, where, orderBy }))
       .digest("hex");
 
     const cacheKey = `ads:list:${userId || "guest"}:${page}:${limit}:${hash}`;
@@ -507,20 +903,74 @@ exports.getAllAds = async (req, res) => {
     const cached = await getCache(cacheKey);
     if (cached) return res.json(cached);
 
-    const [ads, total] = await Promise.all([
-      prisma.D_Vacation.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: { created_at: "desc" },
-        include: adIncludeListRelations,
+    if (table_id) {
+      const prismaModel = getModel(table_id);
+
+      if (!prismaModel) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid table_id",
+        });
+      }
+
+      const [ads, total] = await Promise.all([
+        prismaModel.findMany({
+          where,
+          skip,
+          take: limit,
+          orderBy,
+          include: adIncludeListRelations,
+        }),
+        prismaModel.count({ where }),
+      ]);
+
+      const data = await enrichAds(ads, userId, "list");
+
+      const response = {
+        success: true,
+        data,
+        pagination: {
+          total,
+          page,
+          limit,
+          totalPages: Math.ceil(total / limit),
+        },
+      };
+
+      await setCache(cacheKey, response, 60);
+
+      return res.json(response);
+    }
+
+    const tables = getAvailableAdTables();
+    const takePerTable = skip + limit;
+
+    const tableResults = await Promise.all(
+      tables.map(async ({ prismaModel }) => {
+        const [records, count] = await Promise.all([
+          prismaModel.findMany({
+            where,
+            take: takePerTable,
+            orderBy,
+            include: adIncludeListRelations,
+          }),
+          prismaModel.count({ where }),
+        ]);
+
+        return { records, count };
       }),
-      prisma.D_Vacation.count({ where }),
-    ]);
+    );
+
+    const total = tableResults.reduce((sum, result) => sum + result.count, 0);
+    const ads = tableResults
+      .flatMap((result) => result.records)
+      .sort(compareAds(req.query))
+      .slice(skip, skip + limit);
 
     const data = await enrichAds(ads, userId, "list");
 
     const response = {
+      success: true,
       data,
       pagination: {
         total,
@@ -532,99 +982,187 @@ exports.getAllAds = async (req, res) => {
 
     await setCache(cacheKey, response, 60);
 
-    res.json(response);
+    return res.json(response);
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    return res.status(500).json({ success: false, message: err.message });
   }
 };
 exports.getAd = async (req, res) => {
   try {
+    const table_id = Number(req.params.table_id);
     const adId = Number(req.params.adId);
+    const prismaModel = getModel(table_id);
 
-    const ad = await prisma.D_Vacation.findUnique({
+    if (!prismaModel) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid table_id",
+      });
+    }
+
+    const ad = await prismaModel.findUnique({
       where: { id: adId },
       include: adIncludeRelations,
     });
 
-    if (!ad) return res.status(404).json({ message: "Not found" });
+    if (!ad) {
+      return res.status(404).json({
+        success: false,
+        message: "Ad not found",
+      });
+    }
 
     const userId = req.user?.id || null;
-    const [adminActiveAdsCount, subuserActiveAdsCount] = await Promise.all([
-      ad.admin?.id
-        ? prisma.D_Vacation.count({
-            where: {
-              admin_id: ad.admin.id,
-              status: "ACTIVE",
-            },
-          })
-        : null,
-      ad.subuser?.id
-        ? prisma.D_Vacation.count({
-            where: {
-              subuser_id: ad.subuser.id,
-              status: "ACTIVE",
-            },
-          })
-        : null,
-    ]);
+    const stats = await trackAdView({
+      prismaModel,
+      entityId: adId,
+      tableId: table_id,
+      userId,
+      ip: req.ip,
+    });
 
-    const enriched = await enrichAds(ad, userId, "detail");
-
-    if (enriched[0]?.admin) {
-      enriched[0].admin = {
-        ...enriched[0].admin,
-        active_ads_count: adminActiveAdsCount || 0,
-      };
-    }
-
-    if (enriched[0]?.subuser) {
-      enriched[0].subuser = {
-        ...enriched[0].subuser,
-        active_ads_count: subuserActiveAdsCount || 0,
-      };
-    }
+    const enriched = await enrichAds({ ...ad, ...stats }, userId, "detail");
 
     return res.json(enriched[0]);
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    return res.status(500).json({
+      success: false,
+      message: err.message,
+    });
   }
 };
 exports.getUserAds = async (req, res) => {
   try {
     const userId = Number(req.params.userId);
     const { page, limit, skip } = pagination(req.query);
+    const viewerId = req.user?.id || null;
+    const isAdmin = req.user?.is_super_admin || req.user?.user_type === "ADMIN";
+    const canViewAllStatuses = isAdmin || viewerId === userId;
+    const table_id = req.query.table_id ? Number(req.query.table_id) : null;
 
-    const cacheKey = `userAds:${userId}:${page}:${limit}:${JSON.stringify(req.query)}`;
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid userId",
+      });
+    }
+
+    if (req.query.table_id && !table_id) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid table_id",
+      });
+    }
+
+    const profileWhere = {
+      OR: [{ user_id: userId }, { admin_id: userId }],
+    };
+
+    const filtersWhere = buildAdsWhere(req.query, canViewAllStatuses, {
+      includeDynamic: Boolean(table_id),
+    });
+
+    const where = {
+      AND: [
+        profileWhere,
+        ...(filtersWhere.AND ? filtersWhere.AND : [filtersWhere]).filter(
+          (filter) => Object.keys(filter).length,
+        ),
+      ],
+    };
+
+    const orderBy = getAdsOrderBy(req.query);
+
+    const crypto = require("crypto");
+
+    const hash = crypto
+      .createHash("md5")
+      .update(
+        JSON.stringify({
+          query: req.query,
+          where,
+          orderBy,
+          canViewAllStatuses,
+        }),
+      )
+      .digest("hex");
+
+    const cacheKey = `userAds:${userId}:${viewerId || "guest"}:${page}:${limit}:${hash}`;
 
     const cached = await getCache(cacheKey);
 
     if (cached) {
-      const data = await enrichAds(cached.data, userId, "list");
-
-      return res.json({
-        ...cached,
-        data,
-      });
+      return res.json(cached);
     }
 
-    const where = {
-      OR: [{ admin_id: Number(userId) }, { subuser_id: Number(userId) }],
-    };
+    if (table_id) {
+      const prismaModel = getModel(table_id);
 
-    const [ads, total] = await Promise.all([
-      prisma.D_Vacation.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: { created_at: "desc" },
-        include: adIncludeListRelations,
+      if (!prismaModel) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid table_id",
+        });
+      }
+
+      const [ads, total] = await Promise.all([
+        prismaModel.findMany({
+          where,
+          skip,
+          take: limit,
+          orderBy,
+          include: adIncludeListRelations,
+        }),
+        prismaModel.count({ where }),
+      ]);
+
+      const data = await enrichAds(ads, viewerId, "list");
+
+      const response = {
+        success: true,
+        data,
+        pagination: {
+          total,
+          page,
+          limit,
+          totalPages: Math.ceil(total / limit),
+        },
+      };
+
+      await setCache(cacheKey, response, 60);
+
+      return res.json(response);
+    }
+
+    const tables = getAvailableAdTables();
+    const takePerTable = skip + limit;
+
+    const tableResults = await Promise.all(
+      tables.map(async ({ prismaModel }) => {
+        const [records, count] = await Promise.all([
+          prismaModel.findMany({
+            where,
+            take: takePerTable,
+            orderBy,
+            include: adIncludeListRelations,
+          }),
+          prismaModel.count({ where }),
+        ]);
+
+        return { records, count };
       }),
-      prisma.D_Vacation.count({ where }),
-    ]);
+    );
 
-    const data = await enrichAds(ads, req.user?.id, "list");
+    const total = tableResults.reduce((sum, result) => sum + result.count, 0);
+    const ads = tableResults
+      .flatMap((result) => result.records)
+      .sort(compareAds(req.query))
+      .slice(skip, skip + limit);
+
+    const data = await enrichAds(ads, viewerId, "list");
 
     const response = {
+      success: true,
       data,
       pagination: {
         total,
@@ -636,42 +1174,121 @@ exports.getUserAds = async (req, res) => {
 
     await setCache(cacheKey, response, 60);
 
-    res.json(response);
+    return res.json(response);
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    return res.status(500).json({ success: false, message: err.message });
   }
 };
 exports.getSectionsAds = async (req, res) => {
   try {
     const { type, value } = req.query;
     const { page, limit, skip } = pagination(req.query);
+    const userId = req.user?.id || null;
+    const table_id = req.query.table_id ? Number(req.query.table_id) : null;
+    const sectionField = sectionFieldByType[type];
+    const sectionValue = Number(value);
 
-    const cacheKey = `sections:${type}:${value}:${page}:${limit}`;
+    if (!sectionField || !sectionValue) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Invalid section params. Send type and numeric value. Allowed types: governorate, city, area, compound, category, subCategory",
+      });
+    }
+
+    if (req.query.table_id && !table_id) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid table_id",
+      });
+    }
+
+    if (specificTableSectionTypes.has(type) && !table_id) {
+      return res.status(400).json({
+        success: false,
+        message: "table_id is required for category and subCategory sections",
+      });
+    }
+
+    const cacheKey = `sections:${userId || "guest"}:${JSON.stringify(req.query)}:${page}:${limit}`;
 
     const cached = await getCache(cacheKey);
     if (cached) return res.json(cached);
 
-    const where = { status: "ACTIVE" };
+    const where = {
+      status: "ACTIVE",
+      [sectionField]: sectionValue,
+    };
+    const orderBy = getAdsOrderBy(req.query);
 
-    if (type === "category") where.categoryId = Number(value);
-    if (type === "city") where.city_id = Number(value);
-    if (type === "governorate") where.governorate_id = Number(value);
-    if (type === "compound") where.compound_id = Number(value);
+    if (table_id) {
+      const prismaModel = getModel(table_id);
 
-    const [ads, total] = await Promise.all([
-      prisma.D_Vacation.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: { created_at: "desc" },
-        include: adIncludeListRelations,
+      if (!prismaModel) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid table_id",
+        });
+      }
+
+      const [ads, total] = await Promise.all([
+        prismaModel.findMany({
+          where,
+          skip,
+          take: limit,
+          orderBy,
+          include: adIncludeListRelations,
+        }),
+        prismaModel.count({ where }),
+      ]);
+
+      const data = await enrichAds(ads, userId, "list");
+
+      const response = {
+        success: true,
+        data,
+        pagination: {
+          total,
+          page,
+          limit,
+          totalPages: Math.ceil(total / limit),
+        },
+      };
+
+      await setCache(cacheKey, response, 60);
+
+      return res.json(response);
+    }
+
+    const tables = getAvailableAdTables();
+    const takePerTable = skip + limit;
+
+    const tableResults = await Promise.all(
+      tables.map(async ({ prismaModel }) => {
+        const [records, count] = await Promise.all([
+          prismaModel.findMany({
+            where,
+            take: takePerTable,
+            orderBy,
+            include: adIncludeListRelations,
+          }),
+          prismaModel.count({ where }),
+        ]);
+
+        return { records, count };
       }),
-      prisma.D_Vacation.count({ where }),
-    ]);
+    );
 
-    const data = await enrichAds(ads, req.user?.id, "list");
+    const total = tableResults.reduce((sum, result) => sum + result.count, 0);
+    const ads = tableResults
+      .flatMap((result) => result.records)
+      .sort(compareAds(req.query))
+      .slice(skip, skip + limit);
+
+    const data = await enrichAds(ads, userId, "list");
 
     const response = {
+      success: true,
       data,
       pagination: {
         total,
@@ -684,38 +1301,6 @@ exports.getSectionsAds = async (req, res) => {
     await setCache(cacheKey, response, 60);
 
     res.json(response);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-};
-exports.getFavorites = async (req, res) => {
-  try {
-    const userId = req.user.id;
-    const { page, limit, skip } = pagination(req.query);
-
-    const [fav, total] = await Promise.all([
-      prisma.AdFavorite.findMany({
-        where: { user_id: userId },
-        skip,
-        take: limit,
-        include: { ad: { include: adIncludeListRelations } },
-      }),
-      prisma.AdFavorite.count({ where: { user_id: userId } }),
-    ]);
-
-    const ads = fav.map((f) => f.ad);
-
-    const data = await enrichAds(ads, userId, "list");
-
-    res.json({
-      data,
-      pagination: {
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
-      },
-    });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -723,34 +1308,67 @@ exports.getFavorites = async (req, res) => {
 exports.toggleFavorite = async (req, res) => {
   try {
     const userId = req.user.id;
-    const adId = Number(req.params.adId);
 
-    // 🔹 تأكد إن الإعلان موجود
-    const ad = await prisma.D_Vacation.findUnique({
-      where: { id: adId },
+    const entity_id = Number(req.params.entity_id);
+    const table_id = Number(req.params.table_id);
+
+    // =========================
+    // TABLE
+    // =========================
+    const prismaModel = getModel(table_id);
+
+    if (!prismaModel) {
+      return res.status(400).json({
+        message: `Model ${table.model} not found`,
+      });
+    }
+
+    // =========================
+    // CHECK AD EXISTS
+    // =========================
+    const ad = await prismaModel.findUnique({
+      where: { id: entity_id },
     });
 
     if (!ad) {
-      return res.status(404).json({ message: "Ad not found" });
+      return res.status(404).json({
+        message: "Ad not found",
+      });
     }
 
-    // 🔹 هل المستخدم عامل favorite قبل كده؟
+    // =========================
+    // CHECK EXISTING FAVORITE
+    // =========================
     const existing = await prisma.AdFavorite.findUnique({
       where: {
-        ad_id_user_id: { ad_id: adId, user_id: userId },
+        entity_id_table_id_user_id: {
+          entity_id,
+          table_id,
+          user_id: userId,
+        },
       },
     });
 
-    // 🔹 toggle logic + transaction
+    // =========================
+    // TOGGLE
+    // =========================
+    let updatedAd;
+
     if (existing) {
-      await prisma.$transaction([
+      const [, adAfterFavorite] = await prisma.$transaction([
         prisma.AdFavorite.delete({
           where: {
-            ad_id_user_id: { ad_id: adId, user_id: userId },
+            entity_id_table_id_user_id: {
+              entity_id,
+              table_id,
+              user_id: userId,
+            },
           },
         }),
-        prisma.D_Vacation.update({
-          where: { id: adId },
+
+        prismaModel.update({
+          where: { id: entity_id },
+
           data: {
             favorites_count: {
               decrement: 1,
@@ -758,16 +1376,21 @@ exports.toggleFavorite = async (req, res) => {
           },
         }),
       ]);
+
+      updatedAd = adAfterFavorite;
     } else {
-      await prisma.$transaction([
+      const [, adAfterFavorite] = await prisma.$transaction([
         prisma.AdFavorite.create({
           data: {
-            ad_id: adId,
+            entity_id,
+            table_id,
             user_id: userId,
           },
         }),
-        prisma.D_Vacation.update({
-          where: { id: adId },
+
+        prismaModel.update({
+          where: { id: entity_id },
+
           data: {
             favorites_count: {
               increment: 1,
@@ -775,20 +1398,102 @@ exports.toggleFavorite = async (req, res) => {
           },
         }),
       ]);
+
+      updatedAd = adAfterFavorite;
     }
 
-    // 🔹 cache invalidation
+    // =========================
+    // CACHE
+    // =========================
     await deleteCachePattern("ads:list:*");
     await deleteCachePattern("sections:*");
     await deleteCachePattern(`userAds:${userId}:*`);
     await deleteCachePattern(`favorites:${userId}:*`);
 
-    // 🔹 response
+    // =========================
+    // RESPONSE
+    // =========================
     return res.json({
+      success: true,
+      isFavorite: !existing,
+      favorites_count: updatedAd.favorites_count,
       message: existing ? "Removed from favorites" : "Added to favorites",
     });
   } catch (err) {
     console.error(err);
-    return res.status(500).json({ message: "Server error" });
+
+    return res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};
+exports.getFavorites = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const favorites = await prisma.AdFavorite.findMany({
+      where: {
+        user_id: userId,
+      },
+
+      orderBy: {
+        created_at: "desc",
+      },
+    });
+
+    const grouped = {};
+
+    // =========================
+    // GROUP BY TABLE
+    // =========================
+    for (const fav of favorites) {
+      if (!grouped[fav.table_id]) {
+        grouped[fav.table_id] = [];
+      }
+
+      grouped[fav.table_id].push(fav.entity_id);
+    }
+
+    let ads = [];
+
+    // =========================
+    // FETCH ADS
+    // =========================
+    for (const table_id in grouped) {
+      const prismaModel = getModel(table_id);
+
+      if (!prismaModel) continue;
+
+      const records = await prismaModel.findMany({
+        where: {
+          id: {
+            in: grouped[table_id],
+          },
+        },
+
+        include: adIncludeListRelations,
+      });
+
+      ads.push(...records);
+    }
+
+    // =========================
+    // ENRICH
+    // =========================
+    const data = await enrichAds(ads, userId, "list");
+
+    return res.json({
+      success: true,
+      total: data.length,
+      data,
+    });
+  } catch (err) {
+    console.error(err);
+
+    return res.status(500).json({
+      success: false,
+      message: err.message,
+    });
   }
 };

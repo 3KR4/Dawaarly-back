@@ -1,19 +1,74 @@
 const { PrismaClient } = require("@prisma/client");
+
 const prisma = new PrismaClient();
+
+const tableRegistry = require("../utils/ads/config/tableRegistry");
+
 exports.authorizeOwnerOrSuperAdmin = async (req, res, next) => {
-  const { adId } = req.params;
-  const ad = await prisma.D_Vacation.findUnique({
-    where: { id: Number(adId) },
-  });
-  if (!ad) return res.status(404).json({ message: "Ad not found" });
+  try {
+    const { adId, table_id } = req.params;
 
-  const isSuperAdmin = req.user?.is_super_admin;
-  const isOwner = ad.admin_id === req.user.id || ad.subuser_id === req.user.id;
+    // =========================
+    // TABLE
+    // =========================
+    const table = tableRegistry[Number(table_id)];
 
-  if (!isOwner && !isSuperAdmin) {
-    return res.status(403).json({ message: "Not allowed" });
+    if (!table) {
+      return res.status(400).json({
+        message: "Invalid table_id",
+      });
+    }
+
+    // =========================
+    // MODEL
+    // =========================
+    const prismaModel = prisma[table.model];
+
+    if (!prismaModel) {
+      return res.status(400).json({
+        message: `Model ${table.model} not found`,
+      });
+    }
+
+    // =========================
+    // FIND AD
+    // =========================
+    const ad = await prismaModel.findUnique({
+      where: {
+        id: Number(adId),
+      },
+    });
+
+    if (!ad) {
+      return res.status(404).json({
+        message: `Ad ${adId} not found`,
+      });
+    }
+
+    // =========================
+    // AUTH
+    // =========================
+    const isSuperAdmin = req.user?.is_super_admin;
+
+    const isOwner = ad.user_id === req.user.id;
+
+    if (!isOwner && !isSuperAdmin) {
+      return res.status(403).json({
+        message: "Not allowed",
+      });
+    }
+
+    // =========================
+    // PASS AD
+    // =========================
+    req.ad = ad;
+
+    next();
+  } catch (err) {
+    console.log(err);
+
+    return res.status(500).json({
+      message: "Server Error",
+    });
   }
-
-  req.ad = ad; // ممكن تمرره للـ controller لتوفير query ثاني
-  next();
 };

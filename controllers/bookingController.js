@@ -6,17 +6,17 @@ const calculateTotalPrice = (ad, from_date, to_date) => {
     (new Date(to_date) - new Date(from_date)) / (1000 * 60 * 60 * 24),
   );
 
-  if (!ad.rent_amount) return null;
+  if (!ad.price) return null;
 
   switch (ad.rent_frequency) {
     case "DAY":
-      return ad.rent_amount * diffDays;
+      return ad.price * diffDays;
     case "WEEK":
-      return ad.rent_amount * Math.ceil(diffDays / 7);
+      return ad.price * Math.ceil(diffDays / 7);
     case "MONTH":
-      return ad.rent_amount * Math.ceil(diffDays / 30);
+      return ad.price * Math.ceil(diffDays / 30);
     case "YEAR":
-      return ad.rent_amount * Math.ceil(diffDays / 365);
+      return ad.price * Math.ceil(diffDays / 365);
     default:
       return null;
   }
@@ -46,10 +46,9 @@ const createBooking = async (req, res) => {
     if (from >= to)
       return res.status(400).json({ message: "Invalid date range" });
 
-    const ad = await prisma.D_Vacation.findUnique({
+    const ad = await prisma.D_Vacation_Rent.findUnique({
       where: { id: Number(ad_id) },
     });
-
 
     if (ad.available_from && from < ad.available_from)
       return res.status(400).json({ message: "Before available from" });
@@ -310,7 +309,7 @@ const getBookingsByAd = async (req, res) => {
     if (status) where.status = status;
 
     // التحقق من وجود الإعلان
-    const ad = await prisma.D_Vacation.findUnique({
+    const ad = await prisma.D_Vacation_Rent.findUnique({
       where: { id: adId },
     });
 

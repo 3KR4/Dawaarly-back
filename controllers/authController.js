@@ -5,6 +5,8 @@ const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const { sendVerificationEmail } = require("../utils/sendEmail");
 const rateLimit = require("express-rate-limit");
+const tableRegistry = require("../utils/ads/config/tableRegistry");
+const getModel = require("../utils/ads/services/getModel");
 
 const {
   checkSuperAdminPriority,
@@ -117,13 +119,59 @@ async function serializeUser(user, requester = null) {
 }
 
 // ================= ACTIVE ADS COUNT =================
+const getAvailableAdTables = () =>
+  Object.keys(tableRegistry)
+    .map(Number)
+    .map((table_id) => ({ table_id, prismaModel: getModel(table_id) }))
+    .filter((entry) => entry.prismaModel);
+
 async function getActiveAdsCount(userId) {
-  return prisma.D_Vacation.count({
-    where: {
-      status: "ACTIVE",
-      OR: [{ admin_id: userId }, { subuser_id: userId }],
-    },
-  });
+  const tables = getAvailableAdTables();
+
+  const counts = await Promise.all(
+    tables.map(({ prismaModel }) =>
+      prismaModel.count({
+        where: {
+          status: "ACTIVE",
+          user_id: userId,
+        },
+      }),
+    ),
+  );
+
+  return counts.reduce((sum, count) => sum + count, 0);
+}
+
+async function getActiveAdsCountsMap(userIds = []) {
+  const countsMap = {};
+
+  if (!userIds.length) return countsMap;
+
+  const tables = getAvailableAdTables();
+
+  await Promise.all(
+    tables.map(async ({ prismaModel }) => {
+      const ads = await prismaModel.findMany({
+        where: {
+          status: "ACTIVE",
+          user_id: {
+            in: userIds,
+          },
+        },
+        select: {
+          user_id: true,
+        },
+      });
+
+      ads.forEach((ad) => {
+        if (ad.user_id) {
+          countsMap[ad.user_id] = (countsMap[ad.user_id] || 0) + 1;
+        }
+      });
+    }),
+  );
+
+  return countsMap;
 }
 
 // ================= REGISTER =================
@@ -198,7 +246,16 @@ exports.register = [
         },
       });
 
-      await sendVerificationEmail(email, verificationCode);
+      try {
+        await sendVerificationEmail(email, verificationCode);
+      } catch (emailError) {
+        console.error("Verification email failed:", emailError.message);
+
+        return res.status(502).json({
+          message: "User created, but verification email could not be sent",
+          error: emailError.message,
+        });
+      }
 
       res.status(201).json({
         message: "User created. Please verify your email.",
@@ -254,7 +311,16 @@ exports.login = [
           },
         });
 
-        await sendVerificationEmail(email, verificationCode);
+        try {
+          await sendVerificationEmail(email, verificationCode);
+        } catch (emailError) {
+          console.error("Verification email failed:", emailError.message);
+
+          return res.status(502).json({
+            message: "Email not verified, but verification email could not be sent",
+            error: emailError.message,
+          });
+        }
 
         return res.status(403).json({
           message: "Email not verified. Verification code sent again.",
@@ -269,8 +335,8 @@ exports.login = [
       await prisma.RefreshToken.create({
         data: {
           token: refreshToken,
-          userId: user.id,
-          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+          user_id: user.id,
+          expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
         },
       });
 
@@ -311,21 +377,24 @@ exports.refreshToken = async (req, res) => {
     // ================= VERIFY TOKEN =================
     const decoded = jwt.verify(token, process.env.JWT_REFRESH_SECRET);
 
+    
+
     // ================= FIND TOKEN =================
     const validToken = await prisma.RefreshToken.findUnique({
       where: {
         token,
       },
     });
+    console.log(decoded);
 
-    if (!validToken || validToken.userId !== decoded.id) {
+    if (!validToken || validToken.user_id !== decoded.id) {
       return res.status(403).json({
         message: "Invalid refresh token",
       });
     }
 
     // ================= CHECK EXPIRATION =================
-    if (validToken.expiresAt < new Date()) {
+    if (validToken.expires_at < new Date()) {
       await prisma.RefreshToken.delete({
         where: {
           id: validToken.id,
@@ -422,13 +491,11 @@ exports.verifyEmail = [
     const accessToken = createAccessToken(updatedUser);
     const refreshToken = createRefreshToken(updatedUser);
 
-    const hashedToken = await bcrypt.hash(refreshToken, 10);
-
     await prisma.RefreshToken.create({
       data: {
-        token: hashedToken,
-        userId: updatedUser.id,
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        token: refreshToken,
+        user_id: updatedUser.id,
+        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
       },
     });
 
@@ -480,7 +547,16 @@ exports.resendOTP = [
         },
       });
 
-      await sendVerificationEmail(email, verificationCode);
+      try {
+        await sendVerificationEmail(email, verificationCode);
+      } catch (emailError) {
+        console.error("OTP email failed:", emailError.message);
+
+        return res.status(502).json({
+          message: "OTP updated, but email could not be sent",
+          error: emailError.message,
+        });
+      }
 
       res.json({ message: "OTP resent successfully" });
     } catch (error) {
@@ -518,7 +594,16 @@ exports.forgotPassword = async (req, res) => {
       data: { reset_password_code: resetCode, reset_password_expiry: expiry },
     });
 
-    await sendVerificationEmail(email, resetCode); // إرسال OTP
+    try {
+      await sendVerificationEmail(email, resetCode); // إرسال OTP
+    } catch (emailError) {
+      console.error("Password reset email failed:", emailError.message);
+
+      return res.status(502).json({
+        message: "OTP updated, but email could not be sent",
+        error: emailError.message,
+      });
+    }
 
     res.json({ message: "OTP sent to your email" });
   } catch (err) {
@@ -904,7 +989,7 @@ exports.deleteUser = async (req, res) => {
 
     // حذف refresh tokens
     await prisma.RefreshToken.deleteMany({
-      where: { userId: userToDelete.id },
+      where: { user_id: userToDelete.id },
     });
 
     // حذف المستخدم
@@ -1006,24 +1091,8 @@ exports.getAllUsers = async (req, res) => {
 
     const userIds = users.map((u) => u.id);
 
-    const activeAdsCounts = await prisma.D_Vacation.groupBy({
-      by: ["admin_id", "subuser_id"],
-      where: {
-        status: "ACTIVE",
-        OR: [{ admin_id: { in: userIds } }, { subuser_id: { in: userIds } }],
-      },
-      _count: { id: true },
-    });
+    const countsMap = await getActiveAdsCountsMap(userIds);
 
-    const countsMap = {};
-
-    // احسب لكل واحد سواء admin او subuser
-    activeAdsCounts.forEach((c) => {
-      if (c.admin_id)
-        countsMap[c.admin_id] = (countsMap[c.admin_id] || 0) + c._count.id;
-      if (c.subuser_id)
-        countsMap[c.subuser_id] = (countsMap[c.subuser_id] || 0) + c._count.id;
-    });
     const serializedUsers = await Promise.all(
       users.map(async (u) => {
         const base = await serializeUser(u, requester);
@@ -1074,6 +1143,12 @@ exports.getUser = async (req, res) => {
 };
 exports.getMe = async (req, res) => {
   try {
+    if (!req.user?.id) {
+      return res.status(401).json({
+        message: "Unauthorized - no user in request",
+      });
+    }
+
     const user = await prisma.Users.findUnique({
       where: { id: req.user.id },
     });
@@ -1082,20 +1157,24 @@ exports.getMe = async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    const [serializedUser, activeAdsCount, favoritesCount] = await Promise.all([
+
+
+    const [serializedUser, favoritesCount, activeAdsCount] = await Promise.all([
       serializeUser(user, user),
-      getActiveAdsCount(user.id),
-      prisma.AdFavorite.count({
+      prisma.adFavorite.count({
         where: { user_id: user.id },
       }),
     ]);
 
-    serializedUser.active_ads_count = activeAdsCount;
     serializedUser.favorites_count = favoritesCount;
 
-    res.json(serializedUser);
+    return res.json(serializedUser);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Server error" });
+    console.error("GET ME ERROR:", error);
+
+    return res.status(500).json({
+      message: "Server error",
+      error: error.message,
+    });
   }
 };

@@ -1,108 +1,101 @@
-const buildAdsWhere = (query, isAdmin) => {
-  const {
-    search,
-    category,
-    subCategory,
-    country_id,
-    governorate_id,
-    city_id,
-    area_id,
-    compound_id,
-    min_rent_amount,
-    max_rent_amount,
-    rent_currency,
-    rent_frequency,
-    min_deposit_amount,
-    max_deposit_amount,
-    min_bedrooms,
-    max_bedrooms,
-    min_bathrooms,
-    max_bathrooms,
-    min_level,
-    max_level,
-    am_pool,
-    am_balcony,
-    am_private_garden,
-    am_kitchen,
-    am_ac,
-    am_heating,
-    am_elevator,
-    am_gym,
-    min_available_from,
-    max_available_to,
-    status,
-  } = query;
+const tableRules = require("./ads/config/tableRules");
 
+const isFilled = (value) => value !== undefined && value !== null && value !== "";
+
+const toNumber = (value) => Number(value);
+
+const toBoolean = (value) => value === true || value === "true";
+
+const addRange = (filters, field, min, max) => {
+  if (!isFilled(min) && !isFilled(max)) return;
+
+  const range = {};
+
+  if (isFilled(min)) range.gte = toNumber(min);
+  if (isFilled(max)) range.lte = toNumber(max);
+
+  filters.push({ [field]: range });
+};
+
+const addExactNumber = (filters, field, value) => {
+  if (isFilled(value)) filters.push({ [field]: toNumber(value) });
+};
+
+const addExactString = (filters, field, value) => {
+  if (isFilled(value)) filters.push({ [field]: String(value).trim() });
+};
+
+const addBoolean = (filters, field, value) => {
+  if (isFilled(value)) filters.push({ [field]: toBoolean(value) });
+};
+
+const getAllowedDynamicFields = (tableId) => {
+  if (!tableId) return new Set();
+
+  const rules = tableRules[tableId] || {};
+
+  return new Set([...(rules.required || []), ...(rules.allowed || [])]);
+};
+
+const getAmenityFields = () => {
+  const amenities = new Set();
+
+  Object.values(tableRules).forEach((rules) => {
+    [...(rules.required || []), ...(rules.allowed || [])].forEach((field) => {
+      if (field.startsWith("am_")) amenities.add(field);
+    });
+  });
+
+  return [...amenities];
+};
+
+const amenityFields = getAmenityFields();
+
+const buildAdsWhere = (query, isAdmin, options = {}) => {
+  const tableId = Number(query.table_id) || null;
+  const includeDynamic = options.includeDynamic ?? Boolean(tableId);
+  const dynamicFields = includeDynamic ? getAllowedDynamicFields(tableId) : new Set();
   const filters = [];
 
-  // status logic centralized
   if (!isAdmin) {
     filters.push({ status: "ACTIVE" });
-  } else {
-    if (status?.trim()) {
-      filters.push({ status: status.trim() });
-    } else {
-      filters.push({ NOT: { status: "PENDING" } });
-    }
+  } else if (isFilled(query.status)) {
+    filters.push({ status: String(query.status).trim() });
   }
 
-  // search
-  if (search) {
+  if (isFilled(query.search)) {
+    const search = String(query.search).trim();
+
     filters.push({
-      OR: [
-        { title: { contains: search, mode: "insensitive" } },
-        { description: { contains: search, mode: "insensitive" } },
-        { tags: { hasSome: search.split(" ") } },
-      ],
+      OR: [{ title: { contains: search } }, { description: { contains: search } }],
     });
   }
 
-  // numeric filters helper style
-  const range = (field, min, max) => {
-    if (min) filters.push({ [field]: { gte: Number(min) } });
-    if (max) filters.push({ [field]: { lte: Number(max) } });
-  };
+  addExactNumber(filters, "categoryId", query.category || query.categoryId);
+  addExactNumber(filters, "subCategoryId", query.subCategory || query.subCategoryId);
+  addExactNumber(filters, "country_id", query.country_id);
+  addExactNumber(filters, "governorate_id", query.governorate_id);
+  addExactNumber(filters, "city_id", query.city_id);
+  addExactNumber(filters, "area_id", query.area_id);
+  addExactNumber(filters, "compound_id", query.compound_id);
+  addExactString(filters, "currency", query.currency);
+  addRange(filters, "price", query.min_price, query.max_price);
 
-  range("rent_amount", min_rent_amount, max_rent_amount);
-  range("deposit_amount", min_deposit_amount, max_deposit_amount);
-  range("bedrooms", min_bedrooms, max_bedrooms);
-  range("bathrooms", min_bathrooms, max_bathrooms);
-  range("level", min_level, max_level);
-
-  // relations
-  if (category) filters.push({ categoryId: Number(category) });
-  if (subCategory) filters.push({ subCategoryId: Number(subCategory) });
-  if (country_id) filters.push({ country_id: Number(country_id) });
-  if (governorate_id) filters.push({ governorate_id: Number(governorate_id) });
-  if (city_id) filters.push({ city_id: Number(city_id) });
-  if (area_id) filters.push({ area_id: Number(area_id) });
-  if (compound_id) filters.push({ compound_id: Number(compound_id) });
-
-  // booleans helper
-  const bool = (key, value) => {
-    if (value !== undefined) {
-      filters.push({ [key]: value === "true" });
+  if (includeDynamic) {
+    if (dynamicFields.has("rent_frequency")) {
+      addExactString(filters, "rent_frequency", query.rent_frequency);
     }
-  };
 
-  bool("am_pool", am_pool);
-  bool("am_balcony", am_balcony);
-  bool("am_private_garden", am_private_garden);
-  bool("am_kitchen", am_kitchen);
-  bool("am_ac", am_ac);
-  bool("am_heating", am_heating);
-  bool("am_elevator", am_elevator);
-  bool("am_gym", am_gym);
+    ["bedrooms", "bathrooms", "level"].forEach((field) => {
+      if (dynamicFields.has(field)) addExactNumber(filters, field, query[field]);
+    });
 
-  if (min_available_from) {
-    filters.push({ available_from: { gte: new Date(min_available_from) } });
+    amenityFields.forEach((field) => {
+      if (dynamicFields.has(field)) addBoolean(filters, field, query[field]);
+    });
   }
 
-  if (max_available_to) {
-    filters.push({ available_to: { lte: new Date(max_available_to) } });
-  }
-
-  return { AND: filters };
+  return filters.length ? { AND: filters } : {};
 };
 
 module.exports = buildAdsWhere;
