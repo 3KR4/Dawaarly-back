@@ -324,6 +324,7 @@ exports.deleteItem = async (req, res) => {
       city_id: "cities",
       area_id: "areas",
       country_id: "countries",
+      
       compound_id: "compounds",
       category_id: "categories",
       subcategory_id: "subcategories",
