@@ -130,8 +130,46 @@ exports.deleteImage = async (req, res) => {
 
     await cloudinary.uploader.destroy(image.public_id);
 
-    await prisma.Images.delete({
-      where: { id: imageId },
+    await prisma.$transaction(async (tx) => {
+      await tx.Images.delete({
+        where: { id: imageId },
+      });
+
+      if (!image.is_cover) return;
+
+      const baseWhere = {
+        entity_type: entityType,
+        entity_id: entityId,
+        ...(image.table_id !== null && image.table_id !== undefined
+          ? { table_id: image.table_id }
+          : {}),
+      };
+
+      const nextCover = await tx.Images.findFirst({
+        where: {
+          ...baseWhere,
+          OR: [
+            { order: { gt: image.order } },
+            { order: image.order, id: { gt: image.id } },
+          ],
+        },
+        orderBy: [{ order: "asc" }, { id: "asc" }],
+      });
+
+      const fallbackCover = nextCover
+        ? null
+        : await tx.Images.findFirst({
+            where: baseWhere,
+            orderBy: [{ order: "asc" }, { id: "asc" }],
+          });
+
+      const newCover = nextCover || fallbackCover;
+      if (!newCover) return;
+
+      await tx.Images.update({
+        where: { id: newCover.id },
+        data: { is_cover: true },
+      });
     });
 
     return res.status(200).json({ message: "Image deleted successfully" });

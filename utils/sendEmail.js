@@ -1,15 +1,19 @@
 const { Resend } = require("resend");
 
 const resend = new Resend(process.env.RESEND_API_KEY);
+const fromEmail = process.env.RESEND_FROM_EMAIL || "no-reply@dawaarly.com";
 
 exports.sendVerificationEmail = async (to, code) => {
-  try {
-    await resend.emails.send({
-      from: `"Dawaarly" <no-reply@dawaarly.com>`,
-      to,
-      subject: "Verify your email",
+  if (!process.env.RESEND_API_KEY) {
+    throw new Error("RESEND_API_KEY is not configured");
+  }
 
-      html: `
+  const { data, error } = await resend.emails.send({
+    from: `"Dawaarly" <${fromEmail}>`,
+    to,
+    subject: "Verify your email",
+
+    html: `
       <!DOCTYPE html>
 <html>
 <head>
@@ -106,11 +110,11 @@ exports.sendVerificationEmail = async (to, code) => {
 </body>
 </html>
       `,
-    });
+  });
 
-    return true;
-  } catch (err) {
-    console.log(err);
-    return false;
+  if (error) {
+    throw new Error(error.message || "Failed to send verification email");
   }
+
+  return data;
 };

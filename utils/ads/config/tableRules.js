@@ -118,8 +118,8 @@ const landBuildingAmenities = [
   "am_backup_generator",
 ];
 
-const buildingsLandsRequired = ["area_m2", "land_type", "usage_type"];
-const buildingsLandsOptional = ["floors", "*"];
+const buildingsLandsRequired = ["area_m2", "type"];
+const buildingsLandsOptional = ["floors", "land_type", "building_type", "building_condition"];
 
 module.exports = {
   // ================= VACATION =================
@@ -209,7 +209,6 @@ module.exports = {
 
     allowed: [
       ...commonRentOptional,
-      "adult_no_max",
       ...landBuildingAmenities,
       ...buildingsLandsOptional,
     ],

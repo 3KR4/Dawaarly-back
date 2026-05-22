@@ -20,6 +20,59 @@ const MODELS = {
   compounds: prisma.Compounds,
 };
 
+const MODEL_DELEGATES = {
+  categories: "Categories",
+  subcategories: "SubCategories",
+  countries: "Countries",
+  governorates: "Governorates",
+  cities: "Cities",
+  areas: "Areas",
+  compounds: "Compounds",
+};
+
+const ORDER_BY = [{ order: "asc" }, { id: "asc" }];
+
+const ORDER_SCOPE_FIELDS = {
+  categories: ["table_id"],
+  subcategories: ["category_id"],
+  governorates: ["country_id"],
+  cities: ["governorate_id"],
+  areas: ["city_id"],
+  compounds: ["city_id", "area_id"],
+};
+
+const AD_RELATIONS = [
+  "vacation_rent_ads",
+  "vacation_sale_ads",
+  "apartment_rent_ads",
+  "apartment_sale_ads",
+  "villa_rent_ads",
+  "villa_sale_ads",
+  "commercial_rent_ads",
+  "commercial_sale_ads",
+  "buildings_lands_rent_ads",
+  "buildings_lands_sale_ads",
+];
+
+const ADS_COUNT_SELECT = AD_RELATIONS.reduce((select, relation) => {
+  select[relation] = true;
+  return select;
+}, {});
+
+const getOrderScope = (model, item) => {
+  const fields = ORDER_SCOPE_FIELDS[model.toLowerCase()] || [];
+
+  return fields.reduce((where, field) => {
+    where[field] = item[field] ?? null;
+    return where;
+  }, {});
+};
+
+const getAdsCount = (item) =>
+  AD_RELATIONS.reduce((total, relation) => {
+    return total + (item._count?.[relation] || 0);
+  }, 0);
+
 // =========================
 // CRUD OPERATIONS
 // =========================
@@ -27,7 +80,7 @@ const MODELS = {
 exports.getTables = async (req, res) => {
   try {
     const tables = await prisma.AllTables.findMany({
-      orderBy: { id: "asc" },
+      orderBy: ORDER_BY,
       include: {
         _count: {
           select: { categories: true },
@@ -39,6 +92,7 @@ exports.getTables = async (req, res) => {
       id: table.id,
       name_ar: table.name_ar,
       name_en: table.name_en,
+      order: table.order,
       slug: table.slug,
       created_at: table.created_at,
       childsCount: table._count.categories,
@@ -123,17 +177,85 @@ exports.createItem = async (req, res) => {
 exports.updateItem = async (req, res) => {
   try {
     const { model, id } = req.params;
+    const modelKey = model.toLowerCase();
 
-    const prismaModel = MODELS[model.toLowerCase()];
+    const prismaModel = MODELS[modelKey];
     if (!prismaModel) {
       return res.status(400).json({ message: "Invalid model" });
     }
 
-    const data = req.body;
+    const data = { ...req.body };
+    const requestedOrder =
+      data.order !== undefined && data.order !== null && data.order !== ""
+        ? Number(data.order)
+        : undefined;
 
-    const item = await prismaModel.update({
-      where: { id: Number(id) },
-      data,
+    if (requestedOrder !== undefined) {
+      if (!Number.isInteger(requestedOrder) || requestedOrder < 1) {
+        return res.status(400).json({
+          message: "order must be a positive integer",
+        });
+      }
+
+      delete data.order;
+    }
+
+    const item = await prisma.$transaction(async (tx) => {
+      const txModel = tx[MODEL_DELEGATES[modelKey]];
+      const currentItem = await txModel.findUnique({
+        where: { id: Number(id) },
+      });
+
+      if (!currentItem) {
+        throw new Error("Item not found");
+      }
+
+      if (requestedOrder === undefined || requestedOrder === currentItem.order) {
+        return txModel.update({
+          where: { id: Number(id) },
+          data:
+            requestedOrder === undefined
+              ? data
+              : { ...data, order: requestedOrder },
+        });
+      }
+
+      const scopeWhere = getOrderScope(modelKey, currentItem);
+
+      if (requestedOrder < currentItem.order) {
+        await txModel.updateMany({
+          where: {
+            ...scopeWhere,
+            id: { not: Number(id) },
+            order: {
+              gte: requestedOrder,
+              lt: currentItem.order,
+            },
+          },
+          data: {
+            order: { increment: 1 },
+          },
+        });
+      } else {
+        await txModel.updateMany({
+          where: {
+            ...scopeWhere,
+            id: { not: Number(id) },
+            order: {
+              gt: currentItem.order,
+              lte: requestedOrder,
+            },
+          },
+          data: {
+            order: { decrement: 1 },
+          },
+        });
+      }
+
+      return txModel.update({
+        where: { id: Number(id) },
+        data: { ...data, order: requestedOrder },
+      });
     });
 
     // =========================
@@ -260,7 +382,7 @@ exports.deleteItem = async (req, res) => {
 exports.getCategories = async (req, res) => {
   try {
     const categories = await prisma.Categories.findMany({
-      orderBy: { id: "asc" },
+      orderBy: ORDER_BY,
       include: {
         _count: {
           select: { subCategories: true },
@@ -286,7 +408,7 @@ exports.getSubCategories = async (req, res) => {
 
     const subCategories = await prisma.SubCategories.findMany({
       where: categoryId !== undefined ? { category_id: categoryId } : {},
-      orderBy: { id: "asc" },
+      orderBy: ORDER_BY,
     });
 
     res.json(subCategories);
@@ -301,10 +423,13 @@ exports.getSubCategories = async (req, res) => {
 exports.getCountries = async (req, res) => {
   try {
     const countries = await prisma.Countries.findMany({
-      orderBy: { id: "asc" },
+      orderBy: ORDER_BY,
       include: {
         _count: {
-          select: { governorates: true },
+          select: {
+            governorates: true,
+            ...ADS_COUNT_SELECT,
+          },
         },
       },
     });
@@ -312,6 +437,7 @@ exports.getCountries = async (req, res) => {
     const result = countries.map((country) => ({
       ...country,
       childsCount: country._count.governorates,
+      adsCount: getAdsCount(country),
       _count: undefined,
     }));
 
@@ -330,10 +456,13 @@ exports.getGovernorates = async (req, res) => {
 
     const governorates = await prisma.Governorates.findMany({
       where: countryId !== undefined ? { country_id: countryId } : {},
-      orderBy: { id: "asc" },
+      orderBy: ORDER_BY,
       include: {
         _count: {
-          select: { cities: true },
+          select: {
+            cities: true,
+            ...ADS_COUNT_SELECT,
+          },
         },
       },
     });
@@ -341,6 +470,7 @@ exports.getGovernorates = async (req, res) => {
     const result = governorates.map((gov) => ({
       ...gov,
       childsCount: gov._count.cities,
+      adsCount: getAdsCount(gov),
       _count: undefined,
     }));
 
@@ -360,12 +490,13 @@ exports.getCities = async (req, res) => {
     const cities = await prisma.Cities.findMany({
       where:
         governorateId !== undefined ? { governorate_id: governorateId } : {},
-      orderBy: { id: "asc" },
+      orderBy: ORDER_BY,
       include: {
         _count: {
           select: {
             areas: true,
             compounds: true,
+            ...ADS_COUNT_SELECT,
           },
         },
       },
@@ -375,6 +506,7 @@ exports.getCities = async (req, res) => {
       ...city,
       areasCount: city._count.areas,
       compoundsCount: city._count.compounds,
+      adsCount: getAdsCount(city),
       _count: undefined,
     }));
 
@@ -393,10 +525,13 @@ exports.getAreas = async (req, res) => {
 
     const areas = await prisma.Areas.findMany({
       where: cityId !== undefined ? { city_id: cityId } : {},
-      orderBy: { id: "asc" },
+      orderBy: ORDER_BY,
       include: {
         _count: {
-          select: { compounds: true },
+          select: {
+            compounds: true,
+            ...ADS_COUNT_SELECT,
+          },
         },
         city: {
           select: {
@@ -411,6 +546,7 @@ exports.getAreas = async (req, res) => {
     const result = areas.map((area) => ({
       ...area,
       childsCount: area._count.compounds,
+      adsCount: getAdsCount(area),
       _count: undefined,
     }));
 
@@ -438,8 +574,11 @@ exports.getCompounds = async (req, res) => {
 
     const compounds = await prisma.Compounds.findMany({
       where: whereCondition,
-      orderBy: { id: "asc" },
+      orderBy: ORDER_BY,
       include: {
+        _count: {
+          select: ADS_COUNT_SELECT,
+        },
         city: {
           select: {
             id: true,
@@ -461,6 +600,8 @@ exports.getCompounds = async (req, res) => {
       id: compound.id,
       name_ar: compound.name_ar,
       name_en: compound.name_en,
+      order: compound.order,
+      adsCount: getAdsCount(compound),
       city_id: compound.city_id,
       city: compound.city,
       area_id: compound.area_id,

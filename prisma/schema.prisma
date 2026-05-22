@@ -8,7 +8,9 @@ datasource db {
 }
 
 model Users {
-  id        Int    @id @default(autoincrement())
+  id Int @id @default(autoincrement())
+
+  order     Int    @default(10000)
   full_name String
   email     String @unique
   phone     String @unique
@@ -111,6 +113,8 @@ model Users {
 model RefreshToken {
   id Int @id @default(autoincrement())
 
+  order Int @default(10000)
+
   token String @unique
 
   user_id Int
@@ -126,6 +130,8 @@ model RefreshToken {
 
 model AllTables {
   id Int @id @default(autoincrement())
+
+  order Int @default(10000)
 
   name_ar String
   name_en String
@@ -157,6 +163,8 @@ model AllTables {
 
 model Categories {
   id Int @id @default(autoincrement())
+
+  order Int @default(10000)
 
   table_id Int
 
@@ -190,6 +198,8 @@ model Categories {
 model SubCategories {
   id Int @id @default(autoincrement())
 
+  order Int @default(10000)
+
   category_id Int
 
   name_ar String
@@ -220,6 +230,8 @@ model SubCategories {
 model Countries {
   id Int @id @default(autoincrement())
 
+  order Int @default(10000)
+
   name_ar String
   name_en String
 
@@ -244,6 +256,8 @@ model Countries {
 
 model Governorates {
   id Int @id @default(autoincrement())
+
+  order Int @default(10000)
 
   country_id Int
 
@@ -275,6 +289,8 @@ model Governorates {
 
 model Cities {
   id Int @id @default(autoincrement())
+
+  order Int @default(10000)
 
   governorate_id Int
 
@@ -309,6 +325,8 @@ model Cities {
 model Areas {
   id Int @id @default(autoincrement())
 
+  order Int @default(10000)
+
   city_id Int
 
   name_ar String
@@ -337,6 +355,8 @@ model Areas {
 
 model Compounds {
   id Int @id @default(autoincrement())
+
+  order Int @default(10000)
 
   city_id Int
   area_id Int?
@@ -377,7 +397,7 @@ model Images {
 
   is_cover Boolean @default(false)
 
-  order Int?
+  order Int @default(10000)
 
   created_at DateTime @default(now())
 
@@ -389,6 +409,8 @@ model Images {
 
 model AdFavorite {
   id Int @id @default(autoincrement())
+
+  order Int @default(10000)
 
   entity_id Int
   table_id  Int
@@ -408,6 +430,8 @@ model AdFavorite {
 
 model Booking {
   id Int @id @default(autoincrement())
+
+  order Int @default(10000)
 
   entity_id Int
   table_id  Int
@@ -435,6 +459,8 @@ model Booking {
 model AdReach {
   id Int @id @default(autoincrement())
 
+  order Int @default(10000)
+
   entity_id Int
   table_id  Int
 
@@ -455,6 +481,8 @@ model AdReach {
 
 model Blogs {
   id Int @id @default(autoincrement())
+
+  order Int @default(10000)
 
   slug String @unique
 
@@ -500,6 +528,8 @@ model Blogs {
 model BlogReach {
   id Int @id @default(autoincrement())
 
+  order Int @default(10000)
+
   blog_id Int
 
   user_id Int?
@@ -525,13 +555,15 @@ model Sliders {
 
   is_active Boolean @default(true)
 
-  order Int @default(0)
+  order Int @default(10000)
 
   created_at DateTime @default(now())
 }
 
 model AdminLogs {
   id Int @id @default(autoincrement())
+
+  order Int @default(10000)
 
   admin_id Int
 
@@ -600,6 +632,11 @@ enum ImageEntityType {
   BLOG
 }
 
+enum EntityType {
+  BUILDING
+  LAND
+}
+
 enum LandType {
   RESIDENTIAL
   AGRICULTURAL
@@ -613,7 +650,7 @@ enum BuildingCondition {
   UNDER_CONSTRUCTION
 }
 
-enum BuildingUsagesType {
+enum BuildingType {
   RESIDENTIAL
   COMMERCIAL
   MIXED_USE
@@ -622,7 +659,9 @@ enum BuildingUsagesType {
 }
 
 model D_Vacation_Sale {
-  id       Int      @id @default(autoincrement())
+  id Int @id @default(autoincrement())
+
+  order    Int      @default(10000)
   table_id Int
   status   AdStatus @default(PENDING)
 
@@ -758,7 +797,9 @@ model D_Vacation_Sale {
 }
 
 model D_Vacation_Rent {
-  id       Int      @id @default(autoincrement())
+  id Int @id @default(autoincrement())
+
+  order    Int      @default(10000)
   table_id Int
   status   AdStatus @default(PENDING)
 
@@ -896,7 +937,9 @@ model D_Vacation_Rent {
 }
 
 model D_Apartment_Sale {
-  id       Int      @id @default(autoincrement())
+  id Int @id @default(autoincrement())
+
+  order    Int      @default(10000)
   table_id Int
   status   AdStatus @default(PENDING)
 
@@ -1021,7 +1064,9 @@ model D_Apartment_Sale {
 }
 
 model D_Apartment_Rent {
-  id       Int      @id @default(autoincrement())
+  id Int @id @default(autoincrement())
+
+  order    Int      @default(10000)
   table_id Int
   status   AdStatus @default(PENDING)
 
@@ -1150,7 +1195,9 @@ model D_Apartment_Rent {
 }
 
 model D_Villa_Sale {
-  id       Int      @id @default(autoincrement())
+  id Int @id @default(autoincrement())
+
+  order    Int      @default(10000)
   table_id Int
   status   AdStatus @default(PENDING)
 
@@ -1203,25 +1250,25 @@ model D_Villa_Sale {
   level     Int?
   area_m2   Int?
 
-  am_balcony        Boolean @default(false)
-  am_private_garden Boolean @default(false)
-  am_private_roof   Boolean @default(false)
-  am_kitchen        Boolean @default(false)
-  am_ac             Boolean @default(false)
-  am_central_ac     Boolean @default(false)
-  am_heating        Boolean @default(false)
-  am_security       Boolean @default(false)
-  am_parking        Boolean @default(false)
+  am_balcony         Boolean @default(false)
+  am_private_garden  Boolean @default(false)
+  am_private_roof    Boolean @default(false)
+  am_kitchen         Boolean @default(false)
+  am_ac              Boolean @default(false)
+  am_central_ac      Boolean @default(false)
+  am_heating         Boolean @default(false)
+  am_security        Boolean @default(false)
+  am_parking         Boolean @default(false)
   am_private_parking Boolean @default(false)
-  am_driver_room    Boolean @default(false)
-  am_maid_room      Boolean @default(false)
-  am_gas            Boolean @default(false)
-  am_water          Boolean @default(false)
-  am_electricity    Boolean @default(false)
-  am_gym            Boolean @default(false)
-  am_pool           Boolean @default(false)
-  am_jacuzzi        Boolean @default(false)
-  am_bbq_area       Boolean @default(false)
+  am_driver_room     Boolean @default(false)
+  am_maid_room       Boolean @default(false)
+  am_gas             Boolean @default(false)
+  am_water           Boolean @default(false)
+  am_electricity     Boolean @default(false)
+  am_gym             Boolean @default(false)
+  am_pool            Boolean @default(false)
+  am_jacuzzi         Boolean @default(false)
+  am_bbq_area        Boolean @default(false)
 
   views_count     Int @default(0)
   reach_count     Int @default(0)
@@ -1279,7 +1326,9 @@ model D_Villa_Sale {
 }
 
 model D_Villa_Rent {
-  id       Int      @id @default(autoincrement())
+  id Int @id @default(autoincrement())
+
+  order    Int      @default(10000)
   table_id Int
   status   AdStatus @default(PENDING)
 
@@ -1336,25 +1385,25 @@ model D_Villa_Rent {
 
   furnished Boolean @default(false)
 
-  am_balcony        Boolean @default(false)
-  am_private_garden Boolean @default(false)
-  am_private_roof   Boolean @default(false)
-  am_kitchen        Boolean @default(false)
-  am_ac             Boolean @default(false)
-  am_central_ac     Boolean @default(false)
-  am_heating        Boolean @default(false)
-  am_security       Boolean @default(false)
-  am_parking        Boolean @default(false)
+  am_balcony         Boolean @default(false)
+  am_private_garden  Boolean @default(false)
+  am_private_roof    Boolean @default(false)
+  am_kitchen         Boolean @default(false)
+  am_ac              Boolean @default(false)
+  am_central_ac      Boolean @default(false)
+  am_heating         Boolean @default(false)
+  am_security        Boolean @default(false)
+  am_parking         Boolean @default(false)
   am_private_parking Boolean @default(false)
-  am_driver_room    Boolean @default(false)
-  am_maid_room      Boolean @default(false)
-  am_gas            Boolean @default(false)
-  am_water          Boolean @default(false)
-  am_electricity    Boolean @default(false)
-  am_gym            Boolean @default(false)
-  am_pool           Boolean @default(false)
-  am_jacuzzi        Boolean @default(false)
-  am_bbq_area       Boolean @default(false)
+  am_driver_room     Boolean @default(false)
+  am_maid_room       Boolean @default(false)
+  am_gas             Boolean @default(false)
+  am_water           Boolean @default(false)
+  am_electricity     Boolean @default(false)
+  am_gym             Boolean @default(false)
+  am_pool            Boolean @default(false)
+  am_jacuzzi         Boolean @default(false)
+  am_bbq_area        Boolean @default(false)
 
   views_count     Int @default(0)
   reach_count     Int @default(0)
@@ -1412,7 +1461,9 @@ model D_Villa_Rent {
 }
 
 model D_Commercial_Sale {
-  id       Int      @id @default(autoincrement())
+  id Int @id @default(autoincrement())
+
+  order    Int      @default(10000)
   table_id Int
   status   AdStatus @default(PENDING)
 
@@ -1532,7 +1583,9 @@ model D_Commercial_Sale {
 }
 
 model D_Commercial_Rent {
-  id       Int      @id @default(autoincrement())
+  id Int @id @default(autoincrement())
+
+  order    Int      @default(10000)
   table_id Int
   status   AdStatus @default(PENDING)
 
@@ -1656,7 +1709,9 @@ model D_Commercial_Rent {
 }
 
 model D_Buildings_And_Lands_Sale {
-  id       Int      @id @default(autoincrement())
+  id Int @id @default(autoincrement())
+
+  order    Int      @default(10000)
   table_id Int
   status   AdStatus @default(PENDING)
 
@@ -1703,10 +1758,11 @@ model D_Buildings_And_Lands_Sale {
 
   area_m2 Int?
 
-  floors             Int?
-  building_condition BuildingCondition?
+  type               EntityType
   land_type          LandType?
-  usage_type          BuildingUsagesType?
+  building_type      BuildingType?
+  building_condition BuildingCondition?
+  floors             Int?
 
   am_security         Boolean @default(false)
   am_parking          Boolean @default(false)
@@ -1770,7 +1826,9 @@ model D_Buildings_And_Lands_Sale {
 }
 
 model D_Buildings_And_Lands_Rent {
-  id       Int      @id @default(autoincrement())
+  id Int @id @default(autoincrement())
+
+  order    Int      @default(10000)
   table_id Int
   status   AdStatus @default(PENDING)
 
@@ -1819,9 +1877,10 @@ model D_Buildings_And_Lands_Rent {
 
   area_m2            Int?
   floors             Int?
-  building_condition BuildingCondition?
+  type               EntityType
   land_type          LandType?
-  usage_type         BuildingUsagesType?
+  building_type      BuildingType?
+  building_condition BuildingCondition?
 
   am_security         Boolean @default(false)
   am_parking          Boolean @default(false)

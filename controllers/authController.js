@@ -246,7 +246,16 @@ exports.register = [
         },
       });
 
-      await sendVerificationEmail(email, verificationCode);
+      try {
+        await sendVerificationEmail(email, verificationCode);
+      } catch (emailError) {
+        console.error("Verification email failed:", emailError.message);
+
+        return res.status(502).json({
+          message: "User created, but verification email could not be sent",
+          error: emailError.message,
+        });
+      }
 
       res.status(201).json({
         message: "User created. Please verify your email.",
@@ -302,7 +311,16 @@ exports.login = [
           },
         });
 
-        await sendVerificationEmail(email, verificationCode);
+        try {
+          await sendVerificationEmail(email, verificationCode);
+        } catch (emailError) {
+          console.error("Verification email failed:", emailError.message);
+
+          return res.status(502).json({
+            message: "Email not verified, but verification email could not be sent",
+            error: emailError.message,
+          });
+        }
 
         return res.status(403).json({
           message: "Email not verified. Verification code sent again.",
@@ -529,7 +547,16 @@ exports.resendOTP = [
         },
       });
 
-      await sendVerificationEmail(email, verificationCode);
+      try {
+        await sendVerificationEmail(email, verificationCode);
+      } catch (emailError) {
+        console.error("OTP email failed:", emailError.message);
+
+        return res.status(502).json({
+          message: "OTP updated, but email could not be sent",
+          error: emailError.message,
+        });
+      }
 
       res.json({ message: "OTP resent successfully" });
     } catch (error) {
@@ -567,7 +594,16 @@ exports.forgotPassword = async (req, res) => {
       data: { reset_password_code: resetCode, reset_password_expiry: expiry },
     });
 
-    await sendVerificationEmail(email, resetCode); // إرسال OTP
+    try {
+      await sendVerificationEmail(email, resetCode); // إرسال OTP
+    } catch (emailError) {
+      console.error("Password reset email failed:", emailError.message);
+
+      return res.status(502).json({
+        message: "OTP updated, but email could not be sent",
+        error: emailError.message,
+      });
+    }
 
     res.json({ message: "OTP sent to your email" });
   } catch (err) {

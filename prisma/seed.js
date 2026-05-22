@@ -263,6 +263,9 @@ async function main() {
         name_ar: "منشأة القناطر",
         name_en: "ManshiyetAl Qanater",
       },
+      { id: 68, governorate_id: 2, name_ar: "أوسيم", name_en: "Oaseem" },
+      { id: 69, governorate_id: 2, name_ar: "كرداسة", name_en: "Kerdasa" },
+      { id: 70, governorate_id: 2, name_ar: "أبو النمرس", name_en: "Abu Nomros" },
       {
         id: 71,
         governorate_id: 2,
@@ -4546,7 +4549,7 @@ async function main() {
       { id: 818, city_id: 133, name_ar: "سيدى كرير", name_en: "Sidi Kerir" },
       { id: 819, city_id: 134, name_ar: "الجمرك", name_en: "Elgomrok" },
       { id: 820, city_id: 135, name_ar: "المكس", name_en: "Al Max" },
-      { id: 821, city_id: 136, name_ar: "مارينا", name_en: "Marina" },
+      { id: 821, city_id: 130, name_ar: "مارينا", name_en: "Marina" },
       { id: 822, city_id: 137, name_ar: "المنصورة", name_en: "Mansoura" },
       { id: 823, city_id: 137, name_ar: "ميت خميس", name_en: "Meet Khamis" },
       { id: 824, city_id: 137, name_ar: "سندوب", name_en: "Sandoub" },
@@ -6174,7 +6177,7 @@ async function main() {
       { id: 1369, city_id: 394, name_ar: "طما", name_en: "Tama" },
       { id: 1370, city_id: 395, name_ar: "طهطا", name_en: "Tahta" },
       { id: 1371, city_id: 396, name_ar: "الكوثر", name_en: "Alkawthar" },
-      { id: 1372, city_id: 815, name_ar: "الكوثر", name_en: "Alkawthar" },
+
       { id: 1380, city_id: 357, name_ar: "الحمام", name_en: "El Hamam" },
       { id: 1381, city_id: 357, name_ar: "العلمين", name_en: "Alamein" },
       { id: 1382, city_id: 357, name_ar: "الضبعة", name_en: "Dabaa" },
@@ -6213,7 +6216,6 @@ async function main() {
   });
   await prisma.compounds.createMany({
     data: [
-      // الساحل الشمالى 357 ---  عبد الرحمن1389
 
       {
         city_id: 357,
@@ -6238,7 +6240,7 @@ async function main() {
       {
         city_id: 357,
         area_id: 1389,
-        name_ar: "لؤةلؤة هليوبوليس",
+        name_ar: "لؤلؤة هليوبوليس",
         name_en: "Loaloa Heliopolis",
       },
       {
@@ -6305,7 +6307,7 @@ async function main() {
         city_id: 357,
         area_id: 1389,
         name_ar: "بلايا غزالة باى",
-        name_en: "Playa Ghazla Bay",
+        name_en: "Playa Ghazala Bay",
       },
 
       // العلمين (city_id: 350) area_id 1381
@@ -6477,7 +6479,7 @@ async function main() {
         city_id: 357,
         area_id: 1380,
         name_ar: "ريم الفلا",
-        name_en: "ٌٌReem El Fala",
+        name_en: "Reem El Fala",
       },
       {
         city_id: 357,
@@ -6497,7 +6499,7 @@ async function main() {
         city_id: 357,
         area_id: 1380,
         name_ar: "مصر الجديدة عايده بيتش",
-        name_en: "’Misr El Gadida Aida Beach",
+        name_en: "Misr El Gadida Aida Beach",
       },
       {
         city_id: 357,
@@ -6588,107 +6590,106 @@ async function main() {
         name_en: "Gamaet El Dewal El Arabeya",
       },
 
-      { city_id: 1, area_id: 2, name_ar: "مدينتى", name_en: "Madinaty" },
-      { city_id: 1, area_id: 1, name_ar: "الرحاب", name_en: "Al Rehab" },
+      { city_id: 50, area_id: 587, name_ar: "مدينتى", name_en: "Madinaty" },
+      { city_id: 48, area_id: 575, name_ar: "الرحاب", name_en: "Al Rehab" },
       {
-        city_id: 1,
-        area_id: 1,
+        city_id: 17,
+        area_id: null,
         name_ar: "ماونتن فيو آي سيتى",
         name_en: "Mountain View iCity",
       },
       {
-        city_id: 1,
-        area_id: 1,
+        city_id: 17,
+        area_id: null,
         name_ar: "ماونتن فيو هايد بارك",
         name_en: "Mountain View Hyde Park",
       },
-      { city_id: 1, area_id: 1, name_ar: "هايد بارك", name_en: "Hyde Park" },
-      { city_id: 1, area_id: 1, name_ar: "ميفيدا", name_en: "Mivida" },
-      { city_id: 1, area_id: 1, name_ar: "زد ايست", name_en: "Zed East" },
-      { city_id: 1, area_id: 1, name_ar: "تاج سيتى", name_en: "Taj City" },
+      { city_id: 17, area_id: null, name_ar: "هايد بارك", name_en: "Hyde Park" },
+      { city_id: 17, area_id: null, name_ar: "ميفيدا", name_en: "Mivida" },
+      { city_id: 17, area_id: null, name_ar: "زد ايست", name_en: "Zed East" },
+      { city_id: 17, area_id: null, name_ar: "تاج سيتى", name_en: "Taj City" },
       {
-        city_id: 1,
-        area_id: 1,
+        city_id: 17,
+        area_id: null,
         name_ar: "بالمر هيلز",
         name_en: "Palm Hills New Cairo",
       },
       {
-        city_id: 1,
-        area_id: 1,
+        city_id: 17,
+        area_id: null,
         name_ar: "سوديك ويست تاون",
         name_en: "SODIC Westown",
       },
       {
-        city_id: 1,
-        area_id: 1,
+        city_id: 17,
+        area_id: null,
         name_ar: "فيلاجيت",
         name_en: "The Village Gate",
       },
-      { city_id: 1, area_id: 1, name_ar: "ايستاون", name_en: "Eastown" },
+      { city_id: 17, area_id: null, name_ar: "ايستاون", name_en: "Eastown" },
       {
-        city_id: 1,
-        area_id: 1,
+        city_id: 17,
+        area_id: null,
         name_ar: "الباتيو أورو",
         name_en: "El Patio Oro",
       },
       {
-        city_id: 1,
-        area_id: 1,
+        city_id: 17,
+        area_id: null,
         name_ar: "فيفث سكوير",
         name_en: "Fifth Square",
       },
-      { city_id: 1, area_id: 1, name_ar: "البروكس", name_en: "The Brooks" },
-      { city_id: 1, area_id: 1, name_ar: "ذا مارك", name_en: "The MarQ" },
-      { city_id: 1, area_id: 1, name_ar: "بيتا جرينز", name_en: "Beta Greens" },
-      { city_id: 1, area_id: 1, name_ar: "ديستريكت 5", name_en: "District 5" },
+      { city_id: 17, area_id: null, name_ar: "البروكس", name_en: "The Brooks" },
+      { city_id: 17, area_id: null, name_ar: "ذا مارك", name_en: "The MarQ" },
+      { city_id: 17, area_id: null, name_ar: "بيتا جرينز", name_en: "Beta Greens" },
+      { city_id: 17, area_id: null, name_ar: "ديستريكت 5", name_en: "District 5" },
       {
-        city_id: 1,
-        area_id: 1,
+        city_id: 17,
+        area_id: null,
         name_ar: "كريسينت ووك",
         name_en: "Crescent Walk",
       },
-      { city_id: 1, area_id: 1, name_ar: "ساراى", name_en: "Sarai" },
+      { city_id: 17, area_id: null, name_ar: "ساراى", name_en: "Sarai" },
       {
-        city_id: 1,
-        area_id: 1,
+        city_id: 17,
+        area_id: null,
         name_ar: "ماونتن فيو 3",
         name_en: "Mountain View 3",
       },
       {
-        city_id: 1,
-        area_id: 1,
+        city_id: 17,
+        area_id: null,
         name_ar: "لا فيستا مون فالى",
         name_en: "La Vista Moon Valley",
       },
-      { city_id: 1, area_id: 1, name_ar: "بروميناد", name_en: "Promenade" },
+      { city_id: 17, area_id: null, name_ar: "بروميناد", name_en: "Promenade" },
       {
-        city_id: 1,
-        area_id: 1,
+        city_id: 17,
+        area_id: null,
         name_ar: "ذا آدريس إيست",
         name_en: "The Address East",
       },
       {
-        city_id: 1,
-        area_id: 1,
+        city_id: 17,
+        area_id: null,
         name_ar: "ستون ريزيدنس",
         name_en: "Stone Residence",
       },
-      { city_id: 1, area_id: 1, name_ar: "فيرن", name_en: "Vern" },
+      { city_id: 17, area_id: null, name_ar: "فيرن", name_en: "Vern" },
       {
-        city_id: 1,
-        area_id: 1,
+        city_id: 17,
+        area_id: null,
         name_ar: "ماونتن فيو 1",
         name_en: "Mountain View 1",
       },
-      { city_id: 1, area_id: 1, name_ar: "لا ميرادا", name_en: "La Mirada" },
+      { city_id: 17, area_id: null, name_ar: "لا ميرادا", name_en: "La Mirada" },
       {
-        city_id: 29,
-        city_id: 1,
-        area_id: 1,
+        city_id: 17,
+        area_id: null,
         name_ar: "كيستو",
         name_en: "Kesto",
       },
-      { city_id: 30, city_id: 1, area_id: 1, name_ar: "برو", name_en: "Brew" },
+      { city_id: 17, area_id: null, name_ar: "برو", name_en: "Brew" },
       // العاصمة الإدارية (city_id: 57)
       { city_id: 57, area_id: null, name_ar: "بلو فيرت", name_en: "Bleu Vert" },
       { city_id: 57, area_id: null, name_ar: "إيل بوسكو", name_en: "IL Bosco" },
@@ -6710,7 +6711,7 @@ async function main() {
       {
         city_id: 57,
         area_id: null,
-        name_ar: "كاتلاند مارك",
+        name_ar: "كاسل لاندمارك",
         name_en: "Castle Landmark",
       },
       { city_id: 57, area_id: null, name_ar: "سينريو", name_en: "Scenario" },
@@ -6743,45 +6744,45 @@ async function main() {
       // الشيخ زايد (city_id: 60)
       {
         city_id: 60,
-        area_id: 3,
+        area_id: null,
         name_ar: "بيفرلى هيلز",
         name_en: "Beverly Hills",
       },
-      { city_id: 60, area_id: 3, name_ar: "أليجريا", name_en: "Allegria" },
-      { city_id: 60, area_id: 3, name_ar: "ذا إستيتس", name_en: "The Estates" },
-      { city_id: 60, area_id: 3, name_ar: "ويستاون", name_en: "Westown" },
-      { city_id: 60, area_id: 3, name_ar: "كايرو جيت", name_en: "Cairo Gate" },
-      { city_id: 60, area_id: 3, name_ar: "بلڤا", name_en: "Belva" },
-      { city_id: 60, area_id: 3, name_ar: "زد واى", name_en: "ZED West" },
-      { city_id: 60, area_id: 3, name_ar: "فاى", name_en: "VYE" },
+      { city_id: 60, area_id: null, name_ar: "أليجريا", name_en: "Allegria" },
+      { city_id: 60, area_id: null, name_ar: "ذا إستيتس", name_en: "The Estates" },
+      { city_id: 60, area_id: null, name_ar: "ويستاون", name_en: "Westown" },
+      { city_id: 60, area_id: null, name_ar: "كايرو جيت", name_en: "Cairo Gate" },
+      { city_id: 60, area_id: null, name_ar: "بلڤا", name_en: "Belva" },
+      { city_id: 60, area_id: null, name_ar: "زد واى", name_en: "ZED West" },
+      { city_id: 60, area_id: null, name_ar: "فاى", name_en: "VYE" },
       {
         city_id: 60,
-        area_id: 3,
+        area_id: null,
         name_ar: "سولانا وست",
         name_en: "Solana West",
       },
       {
         city_id: 60,
-        area_id: 3,
+        area_id: null,
         name_ar: "ذا بوليجون",
         name_en: "The Polygon",
       },
-      { city_id: 60, area_id: 3, name_ar: "جوار", name_en: "Jewar" },
-      { city_id: 60, area_id: 3, name_ar: "جيدار", name_en: "Jedar" },
-      { city_id: 60, area_id: 3, name_ar: "جيرا", name_en: "Jeera" },
-      { city_id: 60, area_id: 3, name_ar: "إيتابا", name_en: "Etapa" },
-      { city_id: 60, area_id: 3, name_ar: "كاسا", name_en: "Casa" },
-      { city_id: 60, area_id: 3, name_ar: "زايد دانز", name_en: "Zayed Dunes" },
-      { city_id: 60, area_id: 3, name_ar: "الياسمين", name_en: "Al Yasmeen" },
+      { city_id: 60, area_id: null, name_ar: "جوار", name_en: "Jewar" },
+      { city_id: 60, area_id: null, name_ar: "جيدار", name_en: "Jedar" },
+      { city_id: 60, area_id: null, name_ar: "جيرا", name_en: "Jeera" },
+      { city_id: 60, area_id: null, name_ar: "إيتابا", name_en: "Etapa" },
+      { city_id: 60, area_id: null, name_ar: "كاسا", name_en: "Casa" },
+      { city_id: 60, area_id: null, name_ar: "زايد دانز", name_en: "Zayed Dunes" },
+      { city_id: 60, area_id: null, name_ar: "الياسمين", name_en: "Al Yasmeen" },
       {
         city_id: 60,
-        area_id: 3,
+        area_id: null,
         name_ar: "القرية الأوروبية",
         name_en: "The European Village",
       },
       {
         city_id: 60,
-        area_id: 3,
+        area_id: null,
         name_ar: "فيلاج وست",
         name_en: "Village West",
       },
@@ -6816,49 +6817,49 @@ async function main() {
       // المعادى (city_id: 21)
       {
         city_id: 21,
-        area_id: 4,
+        area_id: null,
         name_ar: "معادى جراند سيتى",
         name_en: "Maadi Grand City",
       },
-      { city_id: 21, area_id: 4, name_ar: "دجلة فيو", name_en: "Degla View" },
-      { city_id: 21, area_id: 4, name_ar: "تيزان", name_en: "Tijan" },
-      { city_id: 21, area_id: 4, name_ar: "فاليريا", name_en: "Valeria" },
+      { city_id: 21, area_id: null, name_ar: "دجلة فيو", name_en: "Degla View" },
+      { city_id: 21, area_id: null, name_ar: "تيزان", name_en: "Tijan" },
+      { city_id: 21, area_id: null, name_ar: "فاليريا", name_en: "Valeria" },
       {
         city_id: 21,
-        area_id: 4,
+        area_id: null,
         name_ar: "وادى دجلة المعادى",
         name_en: "Wadi Degla Maadi",
       },
       // المقطم (city_id: 23)
       {
         city_id: 23,
-        area_id: 5,
+        area_id: null,
         name_ar: "أبتاون كايرو",
         name_en: "Uptown Cairo",
       },
       {
         city_id: 23,
-        area_id: 5,
+        area_id: null,
         name_ar: "ماونتن بلازا",
         name_en: "Mountain Plaza",
       },
       {
         city_id: 23,
-        area_id: 5,
+        area_id: null,
         name_ar: "ذا نوفليست",
         name_en: "The Novelist",
       },
       {
         city_id: 23,
-        area_id: 5,
+        area_id: null,
         name_ar: "فاونتن",
         name_en: "Fountain Mokattam",
       },
-      { city_id: 23, area_id: 5, name_ar: "9 سايد", name_en: "9 Side" },
+      { city_id: 23, area_id: null, name_ar: "9 سايد", name_en: "9 Side" },
       // الإسكندرية (city_id: 106)
       {
         city_id: 106,
-        area_id: 6,
+        area_id: null,
         name_ar: "بالم هيلز الإسكندرية",
         name_en: "Palm Hills Alexandria",
       },
@@ -6866,7 +6867,7 @@ async function main() {
       { city_id: 106, area_id: null, name_ar: "كارما", name_en: "Karma" },
       {
         city_id: 106,
-        area_id: 6,
+        area_id: null,
         name_ar: "جرين سموحة",
         name_en: "Green Smouha",
       },
@@ -6884,7 +6885,7 @@ async function main() {
       },
       {
         city_id: 106,
-        area_id: 6,
+        area_id: null,
         name_ar: "تيراس سموحة",
         name_en: "Terrace Smouha",
       },
@@ -6934,10 +6935,11 @@ async function main() {
         name_ar: "لا فيستا كاسكادا",
         name_en: "La Vista Cascada",
       },
-      { city_id: 357, area_id: 1301, name_ar: "لازوردى", name_en: "lazord" },
+          { city_id: 357, area_id: null, name_ar: "لازوردى", name_en: "Lazordi" },
     ],
     skipDuplicates: true,
   });
+
   // =========================
   // ALL TABLES
   // =========================
@@ -7023,6 +7025,7 @@ async function main() {
       { id: 2, table_id: 1, name_en: "Chalet", name_ar: "شاليه" },
       { id: 3, table_id: 1, name_en: "Apartment", name_ar: "شقة" },
       { id: 4, table_id: 1, name_en: "Studio", name_ar: "استوديو" },
+      { id: 5, table_id: 1, name_en: "Hotel Room", name_ar: "غرفة فندقية" },
       { id: 6, table_id: 1, name_en: "Duplex", name_ar: "دوبلكس" },
       { id: 7, table_id: 1, name_en: "Penthouse", name_ar: "بنتهاوس" },
     ],
@@ -7290,7 +7293,7 @@ async function main() {
     skipDuplicates: true,
   });
 
-  await prisma.SubCategories.createMany({
+  await prisma.subCategories.createMany({
     data: [
       // =====================================
       // VILLA
@@ -7479,7 +7482,7 @@ async function main() {
     skipDuplicates: true,
   });
 
-    await prisma.SubCategories.createMany({
+    await prisma.subCategories.createMany({
     data: [
       // =====================================
       // VILLA
