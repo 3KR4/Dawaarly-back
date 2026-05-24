@@ -16,6 +16,17 @@ Every returned ad now includes:
 
 `department.id` is the old `table_id` value.
 
+List responses also include:
+
+```json
+"meta": {
+  "max_price": 5000000,
+  "price_currency": "EGP"
+}
+```
+
+`max_price` is calculated after non-price filters and normalized to EGP, so the frontend can use it as the price slider maximum.
+
 ## Departments
 
 | id | slug | name_en | name_ar |
@@ -51,9 +62,10 @@ Common params:
 | area_id | number | Area id. |
 | compound_id | number | Compound id. |
 | currency | enum | `USD`, `EUR`, `EGP`, `SAR`, `AED`. |
-| min_price | number | Minimum price. |
-| max_price | number | Maximum price. |
-| sort or sort_by | string | `top_views`, `views`, `views_desc`, `date`, `date_asc`. Default is newest. |
+| min_price | number | Minimum price in normalized EGP value. |
+| max_price | number | Maximum price in normalized EGP value. |
+| is_verified or is_verified_only | boolean | Use `true` to return verified ads only. |
+| sort or sort_by | string | `top_views`, `views`, `views_desc`, `favorites`, `favorites_desc`, `date`, `date_asc`, `price_asc`, `price_desc`. Default is newest. Price sort uses normalized EGP value. |
 | order | string | `asc` works with `sort=date`. Otherwise default is `desc`. |
 | status | enum | Admin only. `PENDING`, `ACTIVE`, `REJECTED`, `DISABLED`. Non-admin users always get `ACTIVE` only. |
 
@@ -62,6 +74,14 @@ Dynamic params when `table_id` is sent:
 | Param | Type | Departments |
 | --- | --- | --- |
 | rent_frequency | enum | Rent departments: 2, 4, 6, 8, 10. Values: `DAY`, `WEEK`, `MONTH`. |
+| min_area_m2 / max_area_m2 | number | Departments that have `area_m2`. |
+| ready_to_move | boolean | Sale departments that have this field. |
+| furnished | boolean | Sale departments that have this field. |
+| payment_method | enum | Sale departments. |
+| type | enum | Buildings & lands departments. Values include `BUILDING`, `LAND`. |
+| land_type | enum | Buildings & lands departments when `type=LAND`. |
+| building_type | enum | Buildings & lands departments when `type=BUILDING`. |
+| building_condition | enum | Buildings & lands departments when `type=BUILDING`. |
 | bedrooms | number | 1, 2, 3, 4, 5, 6. |
 | bathrooms | number | 1, 2, 3, 4, 5, 6. |
 | level | number | 1, 2, 3, 4, 5, 6. |
@@ -130,7 +150,7 @@ Returns ads for a user/admin profile across all departments. If `table_id` is se
 | page | number | Pagination page. |
 | limit | number | Pagination size. |
 | table_id | number | Optional department id. Required if you want dynamic filters like `bedrooms` or amenities. |
-| sort or sort_by | string | `top_views`, `views`, `views_desc`, `date`, `date_asc`. Default is newest. |
+| sort or sort_by | string | `top_views`, `views`, `views_desc`, `favorites`, `favorites_desc`, `date`, `date_asc`, `price_asc`, `price_desc`. Default is newest. Price sort uses normalized EGP value. |
 | order | string | `asc` works with `sort=date`. Otherwise default is `desc`. |
 | status | enum | Owner/admin only. `PENDING`, `ACTIVE`, `REJECTED`, `DISABLED`. Public profile visitors always get `ACTIVE` only. |
 
@@ -165,7 +185,7 @@ Category sections are department-specific and require `table_id`:
 | table_id | number | Optional for location sections to restrict one department. Required for category and subCategory sections. |
 | page | number | Pagination page. |
 | limit | number | Pagination size. |
-| sort or sort_by | string | `top_views`, `views`, `views_desc`, `date`, `date_asc`. Default is newest. |
+| sort or sort_by | string | `top_views`, `views`, `views_desc`, `favorites`, `favorites_desc`, `date`, `date_asc`, `price_asc`, `price_desc`. Default is newest. Price sort uses normalized EGP value. |
 | order | string | `asc` works with `sort=date`. Otherwise default is `desc`. |
 
 Examples:

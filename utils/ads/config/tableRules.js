@@ -186,7 +186,7 @@ module.exports = {
 
   // 8 - Commercial Rent
   8: {
-    required: [...commonRentRequired],
+    required: [...commonRentRequired.filter((item) => item !== "adult_no_max")],
 
     allowed: [...commonRentOptional, "area_m2", ...commercialAmenities],
   },

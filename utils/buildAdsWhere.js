@@ -79,12 +79,43 @@ const buildAdsWhere = (query, isAdmin, options = {}) => {
   addExactNumber(filters, "area_id", query.area_id);
   addExactNumber(filters, "compound_id", query.compound_id);
   addExactString(filters, "currency", query.currency);
-  addRange(filters, "price", query.min_price, query.max_price);
+  if (!options.skipPriceRange) {
+    addRange(filters, "price", query.min_price, query.max_price);
+  }
+  addBoolean(filters, "is_verified", query.is_verified || query.is_verified_only);
 
   if (includeDynamic) {
+    if (dynamicFields.has("area_m2")) {
+      addRange(filters, "area_m2", query.min_area_m2, query.max_area_m2);
+    }
+
+    if (dynamicFields.has("down_payment")) {
+      addRange(filters, "down_payment", query.min_down_payment, query.max_down_payment);
+    }
+
+    if (dynamicFields.has("installment_years")) {
+      addExactNumber(filters, "installment_years", query.installment_years);
+    }
+
+    if (dynamicFields.has("floors")) {
+      addExactNumber(filters, "floors", query.floors);
+    }
+
+    if (dynamicFields.has("payment_method")) {
+      addExactString(filters, "payment_method", query.payment_method);
+    }
+
     if (dynamicFields.has("rent_frequency")) {
       addExactString(filters, "rent_frequency", query.rent_frequency);
     }
+
+    ["type", "land_type", "building_type", "building_condition"].forEach((field) => {
+      if (dynamicFields.has(field)) addExactString(filters, field, query[field]);
+    });
+
+    ["ready_to_move", "furnished"].forEach((field) => {
+      if (dynamicFields.has(field)) addBoolean(filters, field, query[field]);
+    });
 
     ["bedrooms", "bathrooms", "level"].forEach((field) => {
       if (dynamicFields.has(field)) addExactNumber(filters, field, query[field]);
