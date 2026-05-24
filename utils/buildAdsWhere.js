@@ -85,7 +85,7 @@ const buildAdsWhere = (query, isAdmin, options = {}) => {
   addBoolean(filters, "is_verified", query.is_verified || query.is_verified_only);
 
   if (includeDynamic) {
-    if (dynamicFields.has("area_m2")) {
+    if (dynamicFields.has("area_m2") && !options.skipAreaRange) {
       addRange(filters, "area_m2", query.min_area_m2, query.max_area_m2);
     }
 

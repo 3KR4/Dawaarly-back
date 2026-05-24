@@ -367,8 +367,14 @@ const getMaxNormalizedPrice = (ads) =>
     ads.reduce((max, ad) => Math.max(max, toEgp(ad.price, ad.currency)), 0),
   );
 
-const buildAdsMeta = (ads) => ({
-  max_price: getMaxNormalizedPrice(ads),
+const getMaxAreaM2 = (ads) =>
+  Math.ceil(
+    ads.reduce((max, ad) => Math.max(max, Number(ad.area_m2) || 0), 0),
+  );
+
+const buildAdsMeta = ({ priceAds, areaAds }) => ({
+  max_price: getMaxNormalizedPrice(priceAds),
+  max_area_m2: getMaxAreaM2(areaAds),
   price_currency: "EGP",
 });
 
@@ -1004,6 +1010,11 @@ exports.getAllAds = async (req, res) => {
       includeDynamic: Boolean(table_id),
       skipPriceRange: true,
     });
+    const areaMetaWhere = buildAdsWhere(req.query, isAdmin, {
+      includeDynamic: Boolean(table_id),
+      skipPriceRange: true,
+      skipAreaRange: true,
+    });
     const orderBy = getAdsOrderBy(req.query);
 
     const crypto = require("crypto");
@@ -1028,15 +1039,23 @@ exports.getAllAds = async (req, res) => {
         });
       }
 
-      const [records] = await Promise.all([
+      const [records, areaMetaRecords] = await Promise.all([
         prismaModel.findMany({
           where,
+          orderBy,
+          include: adIncludeListRelations,
+        }),
+        prismaModel.findMany({
+          where: areaMetaWhere,
           orderBy,
           include: adIncludeListRelations,
         }),
       ]);
 
       const matchingAds = records.filter((ad) =>
+        isWithinNormalizedPriceRange(ad, req.query),
+      );
+      const areaMetaAds = areaMetaRecords.filter((ad) =>
         isWithinNormalizedPriceRange(ad, req.query),
       );
       const total = matchingAds.length;
@@ -1046,7 +1065,10 @@ exports.getAllAds = async (req, res) => {
       const response = {
         success: true,
         data,
-        meta: buildAdsMeta(records),
+        meta: buildAdsMeta({
+          priceAds: records,
+          areaAds: areaMetaAds,
+        }),
         pagination: {
           total,
           page,
@@ -1063,22 +1085,33 @@ exports.getAllAds = async (req, res) => {
     const tables = getAvailableAdTables();
     const tableResults = await Promise.all(
       tables.map(async ({ prismaModel }) => {
-        const [records, count] = await Promise.all([
+        const [records, areaMetaRecords, count] = await Promise.all([
           prismaModel.findMany({
             where,
+            orderBy,
+            include: adIncludeListRelations,
+          }),
+          prismaModel.findMany({
+            where: areaMetaWhere,
             orderBy,
             include: adIncludeListRelations,
           }),
           prismaModel.count({ where }),
         ]);
 
-        return { records, count };
+        return { records, areaMetaRecords, count };
       }),
     );
 
     const allRecords = tableResults.flatMap((result) => result.records);
+    const allAreaMetaRecords = tableResults.flatMap(
+      (result) => result.areaMetaRecords,
+    );
     const matchingAds = allRecords
       .filter((ad) => isWithinNormalizedPriceRange(ad, req.query));
+    const areaMetaAds = allAreaMetaRecords.filter((ad) =>
+      isWithinNormalizedPriceRange(ad, req.query),
+    );
     const total = matchingAds.length;
     const ads = matchingAds
       .sort(compareAds(req.query))
@@ -1089,7 +1122,10 @@ exports.getAllAds = async (req, res) => {
     const response = {
       success: true,
       data,
-      meta: buildAdsMeta(allRecords),
+      meta: buildAdsMeta({
+        priceAds: allRecords,
+        areaAds: areaMetaAds,
+      }),
       pagination: {
         total,
         page,

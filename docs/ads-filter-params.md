@@ -21,11 +21,13 @@ List responses also include:
 ```json
 "meta": {
   "max_price": 5000000,
+  "max_area_m2": 960,
   "price_currency": "EGP"
 }
 ```
 
 `max_price` is calculated after non-price filters and normalized to EGP, so the frontend can use it as the price slider maximum.
+`max_area_m2` is calculated after all current filters except the area range itself, so the frontend can use it as the area slider maximum.
 
 ## Departments
 
