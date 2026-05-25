@@ -15,6 +15,7 @@ const favoriteRoutes = require("./routes/favorites");
 const subscriptionRoutes = require("./routes/subscriptions");
 const slidersRoutes = require("./routes/sliders");
 const blogsRoutes = require("./routes/blogs");
+const searchRoutes = require("./routes/search");
 
 const app = express();
 
@@ -43,6 +44,7 @@ app.use("/favorites", favoriteRoutes);
 app.use("/sub-requests", subscriptionRoutes);
 app.use("/sliders", slidersRoutes);
 app.use("/blogs", blogsRoutes);
+app.use("/search", searchRoutes);
 
 app.get("/", (req, res) => {
   res.send("API Running 🚀");

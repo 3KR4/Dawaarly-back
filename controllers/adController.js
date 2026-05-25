@@ -18,6 +18,8 @@ const adIncludeRelations = {
       phone: true,
       tiktok_link: true,
       facebook_link: true,
+      created_at: true,
+      active_ads_count: true,
     },
   },
 
@@ -26,6 +28,7 @@ const adIncludeRelations = {
       id: true,
       full_name: true,
       email: true,
+      phone: true,
     },
   },
 
