@@ -54,10 +54,28 @@ const AD_RELATIONS = [
   "buildings_lands_sale_ads",
 ];
 
+const TABLE_AD_RELATIONS = {
+  1: "vacation_sale_ads",
+  2: "vacation_rent_ads",
+  3: "apartment_sale_ads",
+  4: "apartment_rent_ads",
+  5: "villa_sale_ads",
+  6: "villa_rent_ads",
+  7: "commercial_sale_ads",
+  8: "commercial_rent_ads",
+  9: "buildings_lands_sale_ads",
+  10: "buildings_lands_rent_ads",
+};
+
 const ADS_COUNT_SELECT = AD_RELATIONS.reduce((select, relation) => {
   select[relation] = true;
   return select;
 }, {});
+
+const getAdsCountSelect = (tableId) => {
+  const relation = TABLE_AD_RELATIONS[Number(tableId)];
+  return relation ? { [relation]: true } : ADS_COUNT_SELECT;
+};
 
 const getOrderScope = (model, item) => {
   const fields = ORDER_SCOPE_FIELDS[model.toLowerCase()] || [];
@@ -68,10 +86,15 @@ const getOrderScope = (model, item) => {
   }, {});
 };
 
-const getAdsCount = (item) =>
-  AD_RELATIONS.reduce((total, relation) => {
+const getAdsCount = (item, tableId = null) => {
+  const relations = tableId
+    ? [TABLE_AD_RELATIONS[Number(tableId)]].filter(Boolean)
+    : AD_RELATIONS;
+
+  return relations.reduce((total, relation) => {
     return total + (item._count?.[relation] || 0);
   }, 0);
+};
 
 // =========================
 // CRUD OPERATIONS
@@ -83,10 +106,35 @@ exports.getTables = async (req, res) => {
       orderBy: ORDER_BY,
       include: {
         _count: {
-          select: { categories: true },
+          select: {
+            categories: true,
+            D_Vacation_Sale: true,
+            D_Vacation_Rent: true,
+            D_Apartment_Sale: true,
+            D_Apartment_Rent: true,
+            D_Villa_Sale: true,
+            D_Villa_Rent: true,
+            D_Commercial_Sale: true,
+            D_Commercial_Rent: true,
+            D_Buildings_And_Lands_Sale: true,
+            D_Buildings_And_Lands_Rent: true,
+          },
         },
       },
     });
+
+    const tableAdCountFields = {
+      1: "D_Vacation_Sale",
+      2: "D_Vacation_Rent",
+      3: "D_Apartment_Sale",
+      4: "D_Apartment_Rent",
+      5: "D_Villa_Sale",
+      6: "D_Villa_Rent",
+      7: "D_Commercial_Sale",
+      8: "D_Commercial_Rent",
+      9: "D_Buildings_And_Lands_Sale",
+      10: "D_Buildings_And_Lands_Rent",
+    };
 
     const result = tables.map((table) => ({
       id: table.id,
@@ -96,6 +144,7 @@ exports.getTables = async (req, res) => {
       slug: table.slug,
       created_at: table.created_at,
       childsCount: table._count.categories,
+      adsCount: table._count[tableAdCountFields[table.id]] || 0,
     }));
 
     return res.json(result);
@@ -386,7 +435,7 @@ exports.getCategories = async (req, res) => {
       orderBy: ORDER_BY,
       include: {
         _count: {
-          select: { subCategories: true },
+          select: { subCategories: true, ...ADS_COUNT_SELECT },
         },
       },
     });
@@ -394,6 +443,7 @@ exports.getCategories = async (req, res) => {
     const result = categories.map((cat) => ({
       ...cat,
       childsCount: cat._count.subCategories,
+      adsCount: getAdsCount(cat),
       _count: undefined,
     }));
 
@@ -410,9 +460,20 @@ exports.getSubCategories = async (req, res) => {
     const subCategories = await prisma.SubCategories.findMany({
       where: categoryId !== undefined ? { category_id: categoryId } : {},
       orderBy: ORDER_BY,
+      include: {
+        _count: {
+          select: ADS_COUNT_SELECT,
+        },
+      },
     });
 
-    res.json(subCategories);
+    res.json(
+      subCategories.map((subCategory) => ({
+        ...subCategory,
+        adsCount: getAdsCount(subCategory),
+        _count: undefined,
+      })),
+    );
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -423,13 +484,15 @@ exports.getSubCategories = async (req, res) => {
 // =========================
 exports.getCountries = async (req, res) => {
   try {
+    const tableId = parseId(req.query.table_id);
+
     const countries = await prisma.Countries.findMany({
       orderBy: ORDER_BY,
       include: {
         _count: {
           select: {
             governorates: true,
-            ...ADS_COUNT_SELECT,
+            ...getAdsCountSelect(tableId),
           },
         },
       },
@@ -438,7 +501,7 @@ exports.getCountries = async (req, res) => {
     const result = countries.map((country) => ({
       ...country,
       childsCount: country._count.governorates,
-      adsCount: getAdsCount(country),
+      adsCount: getAdsCount(country, tableId),
       _count: undefined,
     }));
 
@@ -454,6 +517,7 @@ exports.getCountries = async (req, res) => {
 exports.getGovernorates = async (req, res) => {
   try {
     const countryId = parseId(req.query.country_id);
+    const tableId = parseId(req.query.table_id);
 
     const governorates = await prisma.Governorates.findMany({
       where: countryId !== undefined ? { country_id: countryId } : {},
@@ -462,7 +526,7 @@ exports.getGovernorates = async (req, res) => {
         _count: {
           select: {
             cities: true,
-            ...ADS_COUNT_SELECT,
+            ...getAdsCountSelect(tableId),
           },
         },
       },
@@ -471,7 +535,7 @@ exports.getGovernorates = async (req, res) => {
     const result = governorates.map((gov) => ({
       ...gov,
       childsCount: gov._count.cities,
-      adsCount: getAdsCount(gov),
+      adsCount: getAdsCount(gov, tableId),
       _count: undefined,
     }));
 
@@ -487,6 +551,7 @@ exports.getGovernorates = async (req, res) => {
 exports.getCities = async (req, res) => {
   try {
     const governorateId = parseId(req.query.governorate_id);
+    const tableId = parseId(req.query.table_id);
 
     const cities = await prisma.Cities.findMany({
       where:
@@ -497,7 +562,7 @@ exports.getCities = async (req, res) => {
           select: {
             areas: true,
             compounds: true,
-            ...ADS_COUNT_SELECT,
+            ...getAdsCountSelect(tableId),
           },
         },
       },
@@ -507,7 +572,7 @@ exports.getCities = async (req, res) => {
       ...city,
       areasCount: city._count.areas,
       compoundsCount: city._count.compounds,
-      adsCount: getAdsCount(city),
+      adsCount: getAdsCount(city, tableId),
       _count: undefined,
     }));
 
@@ -523,6 +588,7 @@ exports.getCities = async (req, res) => {
 exports.getAreas = async (req, res) => {
   try {
     const cityId = parseId(req.query.city_id);
+    const tableId = parseId(req.query.table_id);
 
     const areas = await prisma.Areas.findMany({
       where: cityId !== undefined ? { city_id: cityId } : {},
@@ -531,7 +597,7 @@ exports.getAreas = async (req, res) => {
         _count: {
           select: {
             compounds: true,
-            ...ADS_COUNT_SELECT,
+            ...getAdsCountSelect(tableId),
           },
         },
         city: {
@@ -547,7 +613,7 @@ exports.getAreas = async (req, res) => {
     const result = areas.map((area) => ({
       ...area,
       childsCount: area._count.compounds,
-      adsCount: getAdsCount(area),
+      adsCount: getAdsCount(area, tableId),
       _count: undefined,
     }));
 
@@ -564,6 +630,7 @@ exports.getCompounds = async (req, res) => {
   try {
     const areaId = parseId(req.query.area_id);
     const cityId = parseId(req.query.city_id);
+    const tableId = parseId(req.query.table_id);
 
     let whereCondition = {};
 
@@ -578,7 +645,7 @@ exports.getCompounds = async (req, res) => {
       orderBy: ORDER_BY,
       include: {
         _count: {
-          select: ADS_COUNT_SELECT,
+          select: getAdsCountSelect(tableId),
         },
         city: {
           select: {
@@ -602,7 +669,7 @@ exports.getCompounds = async (req, res) => {
       name_ar: compound.name_ar,
       name_en: compound.name_en,
       order: compound.order,
-      adsCount: getAdsCount(compound),
+      adsCount: getAdsCount(compound, tableId),
       city_id: compound.city_id,
       city: compound.city,
       area_id: compound.area_id,

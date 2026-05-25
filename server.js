@@ -1,3 +1,5 @@
+require("dotenv").config();
+console.log("DATABASE_URL:", process.env.DATABASE_URL);
 const express = require("express");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
@@ -13,13 +15,11 @@ const favoriteRoutes = require("./routes/favorites");
 const subscriptionRoutes = require("./routes/subscriptions");
 const slidersRoutes = require("./routes/sliders");
 const blogsRoutes = require("./routes/blogs");
+const searchRoutes = require("./routes/search");
 
 const app = express();
 
 console.log("🚀 SERVER STARTING...");
-console.log("PORT:", process.env.PORT);
-console.log("DB:", process.env.DATABASE_URL ? "OK" : "MISSING");
-console.log("JWT:", process.env.JWT_SECRET ? "OK" : "MISSING");
 
 const allowedOrigins = ["http://localhost:3000", "https://dawaarly.com"];
 app.set("trust proxy", 1);
@@ -44,6 +44,7 @@ app.use("/favorites", favoriteRoutes);
 app.use("/sub-requests", subscriptionRoutes);
 app.use("/sliders", slidersRoutes);
 app.use("/blogs", blogsRoutes);
+app.use("/search", searchRoutes);
 
 app.get("/", (req, res) => {
   res.send("API Running 🚀");

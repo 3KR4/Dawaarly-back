@@ -7,6 +7,7 @@ const { pagination } = require("../utils/pagination");
 const { getCache, setCache, deleteCachePattern } = require("../utils/redis");
 const { validateAdDates } = require("../utils/validation");
 const tableRegistry = require("../utils/ads/config/tableRegistry");
+const { toEgp } = require("../utils/currency");
 
 const adIncludeRelations = {
   user: {
@@ -17,6 +18,8 @@ const adIncludeRelations = {
       phone: true,
       tiktok_link: true,
       facebook_link: true,
+      created_at: true,
+      active_ads_count: true,
     },
   },
 
@@ -25,6 +28,7 @@ const adIncludeRelations = {
       id: true,
       full_name: true,
       email: true,
+      phone: true,
     },
   },
 
@@ -60,6 +64,27 @@ const adIncludeListRelations = {
   category: true,
   subCategory: true,
 };
+
+const listDetailFields = [
+  "furnished",
+  "bedrooms",
+  "bathrooms",
+  "level",
+  "area_m2",
+  "floors",
+  "building_condition",
+];
+
+function pickListDetails(ad) {
+  return listDetailFields.reduce((details, field) => {
+    if (Object.prototype.hasOwnProperty.call(ad, field)) {
+      details[field] = ad[field];
+    }
+
+    return details;
+  }, {});
+}
+
 function formatListAd(ad) {
   const firstImage =
     ad.images?.find((i) => i.is_cover) || ad.images?.[0] || null;
@@ -81,15 +106,12 @@ function formatListAd(ad) {
     compound: ad.compound,
     category: ad.category,
     subCategory: ad.subCategory,
+    featured_priority: ad.featured_priority,
     views_count: ad.views_count,
     reach_count: ad.reach_count,
     favorites_count: ad.favorites_count,
     image: firstImage,
-    details: {
-      bedrooms: ad.bedrooms,
-      bathrooms: ad.bathrooms,
-      level: ad.level,
-    },
+    details: pickListDetails(ad),
   };
 }
 function formatDetailAd(ad) {
@@ -261,6 +283,12 @@ const getAdsOrderBy = (query) => {
 
   if (sort === "top_views" || sort === "views" || sort === "views_desc") {
     orderBy.push({ views_count: "desc" }, { created_at: "desc" });
+  } else if (sort === "favorites" || sort === "favorites_desc") {
+    orderBy.push({ favorites_count: "desc" }, { created_at: "desc" });
+  } else if (sort === "title_asc" || sort === "title") {
+    orderBy.push({ title: "asc" }, { created_at: "desc" });
+  } else if (sort === "title_desc") {
+    orderBy.push({ title: "desc" }, { created_at: "desc" });
   } else if (sort === "date_asc" || (sort === "date" && order === "asc")) {
     orderBy.push({ created_at: "asc" });
   } else {
@@ -283,6 +311,32 @@ const compareAds = (query) => {
       if (viewsDiff !== 0) return viewsDiff;
     }
 
+    if (sort === "favorites" || sort === "favorites_desc") {
+      const favoritesDiff =
+        Number(b.favorites_count || 0) - Number(a.favorites_count || 0);
+      if (favoritesDiff !== 0) return favoritesDiff;
+    }
+
+    if (sort === "price_asc" || sort === "price") {
+      const priceDiff = toEgp(a.price, a.currency) - toEgp(b.price, b.currency);
+      if (priceDiff !== 0) return priceDiff;
+    }
+
+    if (sort === "price_desc") {
+      const priceDiff = toEgp(b.price, b.currency) - toEgp(a.price, a.currency);
+      if (priceDiff !== 0) return priceDiff;
+    }
+
+    if (sort === "title_asc" || sort === "title") {
+      const titleDiff = String(a.title || "").localeCompare(String(b.title || ""));
+      if (titleDiff !== 0) return titleDiff;
+    }
+
+    if (sort === "title_desc") {
+      const titleDiff = String(b.title || "").localeCompare(String(a.title || ""));
+      if (titleDiff !== 0) return titleDiff;
+    }
+
     const aDate = new Date(a.created_at).getTime();
     const bDate = new Date(b.created_at).getTime();
 
@@ -292,6 +346,64 @@ const compareAds = (query) => {
 
     return bDate - aDate;
   };
+};
+
+const isPriceSort = (query) => {
+  const sort = query.sort || query.sort_by;
+  return sort === "price_asc" || sort === "price_desc" || sort === "price";
+};
+
+const isFilled = (value) => value !== undefined && value !== null && value !== "";
+
+const isWithinNormalizedPriceRange = (ad, query) => {
+  const min = isFilled(query.min_price) ? Number(query.min_price) : null;
+  const max = isFilled(query.max_price) ? Number(query.max_price) : null;
+  const normalizedPrice = toEgp(ad.price, ad.currency);
+
+  if (min !== null && normalizedPrice < min) return false;
+  if (max !== null && normalizedPrice > max) return false;
+  return true;
+};
+
+const getMaxNormalizedPrice = (ads) =>
+  Math.ceil(
+    ads.reduce((max, ad) => Math.max(max, toEgp(ad.price, ad.currency)), 0),
+  );
+
+const getMaxAreaM2 = (ads) =>
+  Math.ceil(
+    ads.reduce((max, ad) => Math.max(max, Number(ad.area_m2) || 0), 0),
+  );
+
+const buildAdsMeta = ({ priceAds, areaAds }) => ({
+  max_price: getMaxNormalizedPrice(priceAds),
+  max_area_m2: getMaxAreaM2(areaAds),
+  price_currency: "EGP",
+});
+
+const getSectionOrderBy = (type, query) => {
+  if (type === "views" || type === "top_views") {
+    return [{ views_count: "desc" }, { created_at: "desc" }];
+  }
+
+  if (type === "featured" || type === "futured") {
+    return [{ featured_priority: "desc" }, { created_at: "desc" }];
+  }
+
+  return getAdsOrderBy(query);
+};
+
+const compareSectionAds = (type, query) => {
+  if (type === "views" || type === "top_views") {
+    return (a, b) => {
+      const viewsDiff = Number(b.views_count || 0) - Number(a.views_count || 0);
+      if (viewsDiff !== 0) return viewsDiff;
+
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    };
+  }
+
+  return compareAds(query);
 };
 
 const trackAdView = async ({ prismaModel, entityId, tableId, userId, ip }) => {
@@ -359,6 +471,17 @@ const sectionFieldByType = {
   sub_category: "subCategoryId",
   subcategory: "subCategoryId",
 };
+
+const globalSectionTypes = new Set([
+  "views",
+  "top_views",
+  "featured",
+  "futured",
+  "favorites",
+  "favourites",
+  "favoriets",
+  "table",
+]);
 
 const specificTableSectionTypes = new Set([
   "category",
@@ -888,6 +1011,12 @@ exports.getAllAds = async (req, res) => {
 
     const where = buildAdsWhere(req.query, isAdmin, {
       includeDynamic: Boolean(table_id),
+      skipPriceRange: true,
+    });
+    const areaMetaWhere = buildAdsWhere(req.query, isAdmin, {
+      includeDynamic: Boolean(table_id),
+      skipPriceRange: true,
+      skipAreaRange: true,
     });
     const orderBy = getAdsOrderBy(req.query);
 
@@ -913,22 +1042,36 @@ exports.getAllAds = async (req, res) => {
         });
       }
 
-      const [ads, total] = await Promise.all([
+      const [records, areaMetaRecords] = await Promise.all([
         prismaModel.findMany({
           where,
-          skip,
-          take: limit,
           orderBy,
           include: adIncludeListRelations,
         }),
-        prismaModel.count({ where }),
+        prismaModel.findMany({
+          where: areaMetaWhere,
+          orderBy,
+          include: adIncludeListRelations,
+        }),
       ]);
 
+      const matchingAds = records.filter((ad) =>
+        isWithinNormalizedPriceRange(ad, req.query),
+      );
+      const areaMetaAds = areaMetaRecords.filter((ad) =>
+        isWithinNormalizedPriceRange(ad, req.query),
+      );
+      const total = matchingAds.length;
+      const ads = matchingAds.sort(compareAds(req.query)).slice(skip, skip + limit);
       const data = await enrichAds(ads, userId, "list");
 
       const response = {
         success: true,
         data,
+        meta: buildAdsMeta({
+          priceAds: records,
+          areaAds: areaMetaAds,
+        }),
         pagination: {
           total,
           page,
@@ -943,27 +1086,37 @@ exports.getAllAds = async (req, res) => {
     }
 
     const tables = getAvailableAdTables();
-    const takePerTable = skip + limit;
-
     const tableResults = await Promise.all(
       tables.map(async ({ prismaModel }) => {
-        const [records, count] = await Promise.all([
+        const [records, areaMetaRecords, count] = await Promise.all([
           prismaModel.findMany({
             where,
-            take: takePerTable,
+            orderBy,
+            include: adIncludeListRelations,
+          }),
+          prismaModel.findMany({
+            where: areaMetaWhere,
             orderBy,
             include: adIncludeListRelations,
           }),
           prismaModel.count({ where }),
         ]);
 
-        return { records, count };
+        return { records, areaMetaRecords, count };
       }),
     );
 
-    const total = tableResults.reduce((sum, result) => sum + result.count, 0);
-    const ads = tableResults
-      .flatMap((result) => result.records)
+    const allRecords = tableResults.flatMap((result) => result.records);
+    const allAreaMetaRecords = tableResults.flatMap(
+      (result) => result.areaMetaRecords,
+    );
+    const matchingAds = allRecords
+      .filter((ad) => isWithinNormalizedPriceRange(ad, req.query));
+    const areaMetaAds = allAreaMetaRecords.filter((ad) =>
+      isWithinNormalizedPriceRange(ad, req.query),
+    );
+    const total = matchingAds.length;
+    const ads = matchingAds
       .sort(compareAds(req.query))
       .slice(skip, skip + limit);
 
@@ -972,6 +1125,10 @@ exports.getAllAds = async (req, res) => {
     const response = {
       success: true,
       data,
+      meta: buildAdsMeta({
+        priceAds: allRecords,
+        areaAds: areaMetaAds,
+      }),
       pagination: {
         total,
         page,
@@ -1182,31 +1339,52 @@ exports.getUserAds = async (req, res) => {
 exports.getSectionsAds = async (req, res) => {
   try {
     const { type, value } = req.query;
+    const typeKey = String(type || "").trim();
+    const normalizedType = typeKey.toLowerCase();
     const { page, limit, skip } = pagination(req.query);
     const userId = req.user?.id || null;
-    const table_id = req.query.table_id ? Number(req.query.table_id) : null;
-    const sectionField = sectionFieldByType[type];
+    const valueNumber = Number(value);
+    const requestedTableId = req.query.table_id ? Number(req.query.table_id) : null;
+    const table_id =
+      normalizedType === "table" && !requestedTableId
+        ? valueNumber
+        : requestedTableId;
+    const sectionField = sectionFieldByType[typeKey] || sectionFieldByType[normalizedType];
     const sectionValue = Number(value);
+    const isGlobalSection = globalSectionTypes.has(normalizedType);
+    const needsSpecificTable =
+      specificTableSectionTypes.has(typeKey) ||
+      specificTableSectionTypes.has(normalizedType);
 
-    if (!sectionField || !sectionValue) {
+    if (!typeKey || (!isGlobalSection && (!sectionField || !sectionValue))) {
       return res.status(400).json({
         success: false,
         message:
-          "Invalid section params. Send type and numeric value. Allowed types: governorate, city, area, compound, category, subCategory",
+          "Invalid section params. Allowed types: governorate, gov, city, area, compound, category, subCategory, table, views, featured, favorites",
       });
     }
 
-    if (req.query.table_id && !table_id) {
+    if ((req.query.table_id || normalizedType === "table") && !table_id) {
       return res.status(400).json({
         success: false,
         message: "Invalid table_id",
       });
     }
 
-    if (specificTableSectionTypes.has(type) && !table_id) {
+    if (needsSpecificTable && !table_id) {
       return res.status(400).json({
         success: false,
         message: "table_id is required for category and subCategory sections",
+      });
+    }
+
+    if (
+      ["favorites", "favourites", "favoriets"].includes(normalizedType) &&
+      !userId
+    ) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required for favorites section",
       });
     }
 
@@ -1217,9 +1395,83 @@ exports.getSectionsAds = async (req, res) => {
 
     const where = {
       status: "ACTIVE",
-      [sectionField]: sectionValue,
     };
-    const orderBy = getAdsOrderBy(req.query);
+
+    if (sectionField) {
+      where[sectionField] = sectionValue;
+    }
+
+    if (normalizedType === "featured" || normalizedType === "futured") {
+      where.featured_priority = { gt: 0 };
+    }
+
+    const orderBy = getSectionOrderBy(normalizedType, req.query);
+
+    if (["favorites", "favourites", "favoriets"].includes(normalizedType)) {
+      const favorites = await prisma.AdFavorite.findMany({
+        where: {
+          user_id: userId,
+          ...(table_id && { table_id }),
+        },
+        orderBy: {
+          created_at: "desc",
+        },
+      });
+
+      const grouped = favorites.reduce((acc, fav) => {
+        if (!acc[fav.table_id]) acc[fav.table_id] = [];
+        acc[fav.table_id].push(fav.entity_id);
+        return acc;
+      }, {});
+
+      let ads = [];
+
+      for (const favTableId in grouped) {
+        const prismaModel = getModel(favTableId);
+        if (!prismaModel) continue;
+
+        const records = await prismaModel.findMany({
+          where: {
+            status: "ACTIVE",
+            id: {
+              in: grouped[favTableId],
+            },
+          },
+          include: adIncludeListRelations,
+        });
+
+        ads.push(...records);
+      }
+
+      const favoriteOrder = new Map(
+        favorites.map((fav, index) => [`${fav.table_id}_${fav.entity_id}`, index]),
+      );
+
+      ads = ads
+        .sort((a, b) => {
+          const aIndex = favoriteOrder.get(`${a.table_id}_${a.id}`) ?? 0;
+          const bIndex = favoriteOrder.get(`${b.table_id}_${b.id}`) ?? 0;
+          return aIndex - bIndex;
+        });
+
+      const total = ads.length;
+      const data = await enrichAds(ads.slice(skip, skip + limit), userId, "list");
+
+      const response = {
+        success: true,
+        data,
+        pagination: {
+          total,
+          page,
+          limit,
+          totalPages: Math.ceil(total / limit),
+        },
+      };
+
+      await setCache(cacheKey, response, 60);
+
+      return res.json(response);
+    }
 
     if (table_id) {
       const prismaModel = getModel(table_id);
@@ -1282,7 +1534,7 @@ exports.getSectionsAds = async (req, res) => {
     const total = tableResults.reduce((sum, result) => sum + result.count, 0);
     const ads = tableResults
       .flatMap((result) => result.records)
-      .sort(compareAds(req.query))
+      .sort(compareSectionAds(normalizedType, req.query))
       .slice(skip, skip + limit);
 
     const data = await enrichAds(ads, userId, "list");
