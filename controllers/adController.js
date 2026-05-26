@@ -8,9 +8,16 @@ const { getCache, setCache, deleteCachePattern } = require("../utils/redis");
 const { validateAdDates } = require("../utils/validation");
 const tableRegistry = require("../utils/ads/config/tableRegistry");
 const { toEgp } = require("../utils/currency");
+const {
+  sendPendingAdReviewEmail,
+  sendAdStatusDecisionEmail,
+} = require("../utils/sendEmail");
+
+const PENDING_AD_REVIEW_EMAIL =
+  process.env.PENDING_AD_REVIEW_EMAIL || "mouhamedmahmoud820@gmail.com";
 
 const adIncludeRelations = {
-  user: {
+  subuser: {
     select: {
       id: true,
       full_name: true,
@@ -20,6 +27,18 @@ const adIncludeRelations = {
       facebook_link: true,
       created_at: true,
       active_ads_count: true,
+    },
+  },
+
+  anonymous: {
+    select: {
+      id: true,
+      full_name: true,
+      email: true,
+      phone: true,
+      ip_address: true,
+      created_at: true,
+      approved_by_admin_id: true,
     },
   },
 
@@ -53,6 +72,37 @@ const adIncludeListRelations = {
   governorate: true,
   area: true,
   compound: true,
+  anonymous: {
+    select: {
+      id: true,
+      full_name: true,
+      email: true,
+      phone: true,
+      ip_address: true,
+    },
+  },
+
+  subuser: {
+    select: {
+      id: true,
+      full_name: true,
+      email: true,
+      phone: true,
+      user_type: true,
+      created_at: true,
+      active_ads_count: true,
+    },
+  },
+
+  admin: {
+    select: {
+      id: true,
+      full_name: true,
+      email: true,
+      phone: true,
+      user_type: true,
+    },
+  },
 
   table: {
     select: {
@@ -110,6 +160,12 @@ function formatListAd(ad) {
     views_count: ad.views_count,
     reach_count: ad.reach_count,
     favorites_count: ad.favorites_count,
+    admin: ad.admin || null,
+    subuser: ad.subuser || null,
+    user: ad.user || null,
+    anonymous: ad.anonymous || null,
+    anonymous_id: ad.anonymous_id || null,
+    user_id: ad.user_id || null,
     image: firstImage,
     details: pickListDetails(ad),
   };
@@ -117,6 +173,19 @@ function formatListAd(ad) {
 function formatDetailAd(ad) {
   const amenities = {};
   const details = {};
+  const relationIdFields = [
+    "admin_id",
+    "user_id",
+    "subuser_id",
+    "anonymous_id",
+    "country_id",
+    "governorate_id",
+    "city_id",
+    "area_id",
+    "compound_id",
+    "categoryId",
+    "subCategoryId",
+  ];
 
   const cleaned = { ...ad };
 
@@ -130,6 +199,10 @@ function formatDetailAd(ad) {
       details[k] = cleaned[k];
       delete cleaned[k];
     }
+  });
+
+  relationIdFields.forEach((field) => {
+    delete cleaned[field];
   });
 
   return {
@@ -157,6 +230,29 @@ async function enrichAds(ads, userId = null, mode = "list") {
 
   let images = [];
   let favorites = [];
+  const regularUserIds = [
+    ...new Set(ads.map((ad) => ad.user_id).filter(Boolean)),
+  ];
+  let regularUsersById = {};
+
+  if (regularUserIds.length) {
+    const regularUsers = await prisma.Users.findMany({
+      where: { id: { in: regularUserIds } },
+      select: {
+        id: true,
+        full_name: true,
+        email: true,
+        phone: true,
+        user_type: true,
+        created_at: true,
+      },
+    });
+
+    regularUsersById = regularUsers.reduce((acc, user) => {
+      acc[user.id] = user;
+      return acc;
+    }, {});
+  }
 
   // =========================
   // LOAD DATA
@@ -242,9 +338,14 @@ async function enrichAds(ads, userId = null, mode = "list") {
 
     const formatted =
       mode === "detail"
-        ? formatDetailAd({ ...ad, images: adImages })
+        ? formatDetailAd({
+            ...ad,
+            user: regularUsersById[ad.user_id] || ad.user || null,
+            images: adImages,
+          })
         : formatListAd({
             ...ad,
+            user: regularUsersById[ad.user_id] || ad.user || null,
             image: adImages[0] || null,
           });
 
@@ -459,6 +560,21 @@ const getAvailableAdTables = () =>
     .map((table_id) => ({ table_id, prismaModel: getModel(table_id) }))
     .filter((entry) => entry.prismaModel);
 
+const getActiveAdsCount = async (subuserId) => {
+  const counts = await Promise.all(
+    getAvailableAdTables().map(({ prismaModel }) =>
+      prismaModel.count({
+        where: {
+          status: "ACTIVE",
+          subuser_id: subuserId,
+        },
+      }),
+    ),
+  );
+
+  return counts.reduce((total, count) => total + count, 0);
+};
+
 const sectionFieldByType = {
   gov: "governorate_id",
   governorate: "governorate_id",
@@ -493,9 +609,122 @@ const specificTableSectionTypes = new Set([
 const normalizeBoolean = (value) =>
   value === true || value === "true" || value === 1 || value === "1";
 
+const normalizePermissions = (permissions) => {
+  if (!permissions) return [];
+  if (Array.isArray(permissions)) return permissions.filter(Boolean);
+
+  if (typeof permissions === "string") {
+    const trimmed = permissions.trim();
+    if (!trimmed) return [];
+
+    try {
+      const parsed = JSON.parse(trimmed);
+      return Array.isArray(parsed) ? parsed.filter(Boolean) : [];
+    } catch {
+      return trimmed
+        .split(",")
+        .map((permission) => permission.trim())
+        .filter(Boolean);
+    }
+  }
+
+  return [];
+};
+
+const normalizeTagsForStorage = (tags) => {
+  if (tags === undefined) return undefined;
+  if (tags === null) return null;
+
+  if (Array.isArray(tags)) {
+    const values = tags.map((tag) => String(tag).trim()).filter(Boolean);
+    return values.length ? JSON.stringify(values) : null;
+  }
+
+  if (typeof tags === "string") {
+    const trimmedTags = tags.trim();
+    if (!trimmedTags) return null;
+
+    try {
+      JSON.parse(trimmedTags);
+      return trimmedTags;
+    } catch {
+      const values = trimmedTags
+        .split(",")
+        .map((tag) => tag.trim())
+        .filter(Boolean);
+
+      return values.length ? JSON.stringify(values) : null;
+    }
+  }
+
+  return JSON.stringify(tags);
+};
+
+const getRequestIp = (req) =>
+  req.headers["x-forwarded-for"]?.split(",")[0]?.trim() ||
+  req.ip ||
+  req.socket?.remoteAddress ||
+  null;
+
+const normalizeAnonymousContact = (anonymous = {}) => ({
+  full_name: String(anonymous.full_name || anonymous.name || "").trim(),
+  email: anonymous.email ? String(anonymous.email).trim() : null,
+  phone: anonymous.phone ? String(anonymous.phone).trim() : null,
+});
+
+const createAnonymousOwner = async (anonymous, req) => {
+  const contact = normalizeAnonymousContact(anonymous);
+
+  if (!contact.full_name) {
+    const error = new Error("Anonymous full_name is required");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (!contact.email && !contact.phone) {
+    const error = new Error("Anonymous email or phone is required");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return prisma.Anonymous.create({
+    data: {
+      ...contact,
+      ip_address: getRequestIp(req),
+    },
+  });
+};
+
+const getAdOwnerContact = async (ad) => {
+  if (ad.subuser_id) {
+    return prisma.Users.findUnique({
+      where: { id: ad.subuser_id },
+      select: { email: true, full_name: true },
+    });
+  }
+
+  if (ad.user_id) {
+    return prisma.Users.findUnique({
+      where: { id: ad.user_id },
+      select: { email: true, full_name: true },
+    });
+  }
+
+  if (ad.anonymous_id) {
+    return prisma.Anonymous.findUnique({
+      where: { id: ad.anonymous_id },
+      select: { email: true, full_name: true },
+    });
+  }
+
+  return null;
+};
+
 exports.createAd = async (req, res) => {
   try {
-    const data = req.body;
+    const data = { ...req.body };
+    const anonymousPayload = data.anonymous;
+    delete data.anonymous;
 
     // =========================
     // TABLE ID
@@ -522,18 +751,77 @@ exports.createAd = async (req, res) => {
       });
     }
 
-    // =========================
-    // USER DATA
-    // =========================
-    const user = req.user;
+    const authUser = req.user;
+    const user = authUser
+      ? await prisma.Users.findUnique({
+          where: { id: authUser.id },
+        })
+      : null;
+
+    if (authUser && !user) {
+      return res.status(401).json({
+        message: "Authenticated user not found",
+      });
+    }
+
+    if (user) {
+      user.permissions = normalizePermissions(user.permissions);
+    }
 
     // =========================
-    // STATUS LOGIC
+    // OWNER LOGIC
     // =========================
-    const isAdmin =
-      user?.is_super_admin || user?.permissions?.includes("CREATE_AD");
+    let subuser_id = null;
+    let user_id = null;
+    let anonymous_id = null;
+    let admin_id = null;
+    let status = "PENDING";
+    let is_verified = false;
+    let status_changed_at = null;
 
-    const status = isAdmin ? "ACTIVE" : "PENDING";
+    if (!user) {
+      const anonymous = await createAnonymousOwner(anonymousPayload, req);
+      anonymous_id = anonymous.id;
+      data.display_dawaarly_contact = true;
+      data.display_phone = false;
+      data.display_whatsapp = false;
+    } else if (user.is_super_admin) {
+      admin_id = user.id;
+      status = "ACTIVE";
+      is_verified = true;
+      status_changed_at = new Date();
+    } else if (user.user_type === "ADMIN") {
+      if (!user.permissions?.includes("CREATE_AD")) {
+        return res.status(403).json({
+          message: "Access denied: You need CREATE_AD permission",
+        });
+      }
+
+      admin_id = user.id;
+      status = "ACTIVE";
+      is_verified = true;
+      status_changed_at = new Date();
+    } else if (user.user_type === "SUBUSER") {
+      const activeAdsCount = await getActiveAdsCount(user.id);
+      const activeAdsLimit = Number(user.subscription_ads_limit || 0);
+
+      if (activeAdsCount >= activeAdsLimit) {
+        return res.status(403).json({
+          message: "Active ads limit reached",
+        });
+      }
+
+      subuser_id = user.id;
+    } else if (user.user_type === "USER") {
+      user_id = user.id;
+      data.display_dawaarly_contact = true;
+      data.display_phone = false;
+      data.display_whatsapp = false;
+    } else {
+      return res.status(403).json({
+        message: "This user type cannot create ads",
+      });
+    }
 
     // =========================
     // BUILD CREATE DATA
@@ -542,13 +830,17 @@ exports.createAd = async (req, res) => {
       ...data,
 
       table_id,
-      user_id: isAdmin ? null : user.id,
-      admin_id: isAdmin ? user.id : null,
+      subuser_id,
+      user_id,
+      anonymous_id,
+      admin_id,
       status,
-      is_verified: isAdmin,
+      is_verified,
 
-      status_changed_at: isAdmin ? new Date() : null,
+      status_changed_at,
     };
+
+    createData.tags = normalizeTagsForStorage(createData.tags);
 
     // =========================
     // DATE CASTING
@@ -568,6 +860,17 @@ exports.createAd = async (req, res) => {
       data: createData,
     });
 
+    if (ad.status === "PENDING") {
+      sendPendingAdReviewEmail({
+        to: PENDING_AD_REVIEW_EMAIL,
+        adTitle: ad.title,
+        adId: ad.id,
+        tableId: table_id,
+      }).catch((error) => {
+        console.error("Failed to send pending ad review email:", error.message);
+      });
+    }
+
     // =========================
     // RESPONSE
     // =========================
@@ -583,7 +886,7 @@ exports.createAd = async (req, res) => {
   } catch (err) {
     console.log(err);
 
-    return res.status(500).json({
+    return res.status(err.statusCode || 500).json({
       success: false,
       message: err.message,
     });
@@ -622,9 +925,9 @@ exports.updateAd = async (req, res) => {
     const user = req.user;
 
     const isAdmin =
-      user?.permissions?.includes("EDIT_AD") || user?.is_super_admin;
+      user?.permissions?.includes("UPDATE_AD") || user?.is_super_admin;
 
-    const isOwner = ad.user_id === user.id;
+    const isOwner = ad.subuser_id === user.id;
 
     if (!isAdmin && !isOwner) {
       return res.status(403).json({
@@ -648,6 +951,10 @@ exports.updateAd = async (req, res) => {
       ...req.body,
     };
 
+    if (Object.prototype.hasOwnProperty.call(dataToUpdate, "tags")) {
+      dataToUpdate.tags = normalizeTagsForStorage(dataToUpdate.tags);
+    }
+
     // date casting
     if (req.body.available_from) {
       dataToUpdate.available_from = new Date(req.body.available_from);
@@ -669,7 +976,11 @@ exports.updateAd = async (req, res) => {
 
     // prevent changing protected fields
     delete dataToUpdate.id;
+    delete dataToUpdate.table_id;
+    delete dataToUpdate.subuser_id;
     delete dataToUpdate.user_id;
+    delete dataToUpdate.admin_id;
+    delete dataToUpdate.anonymous_id;
 
     if (!isAdmin) {
       delete dataToUpdate.is_verified;
@@ -738,7 +1049,7 @@ exports.deleteAd = async (req, res) => {
     // =========================
     const user = req.user;
 
-    const isOwner = ad.user_id === user.id;
+    const isOwner = ad.subuser_id === user.id;
 
     const canDelete =
       user?.is_super_admin || user?.permissions?.includes("DELETE_AD");
@@ -827,7 +1138,7 @@ exports.changeAdStatus = async (req, res) => {
       req.user?.is_super_admin ||
       req.user?.permissions?.includes("CHANGE_ADS_STATUS");
 
-    const isOwner = ad.user_id === req.user.id;
+    const isOwner = ad.subuser_id === req.user.id;
 
     // =========================
     // VALID STATUS
@@ -877,17 +1188,46 @@ exports.changeAdStatus = async (req, res) => {
     // =========================
     // UPDATE
     // =========================
+    const statusChangedAt = new Date();
     const updatedAd = await prismaModel.update({
       where: { id: adId },
       data: {
         status,
-        status_changed_at: new Date(),
+        status_changed_at: statusChangedAt,
+        ...(status === "ACTIVE" &&
+          isAdmin &&
+          !ad.admin_id && {
+            admin_id: req.user.id,
+          }),
 
         ...(reject_reason && {
           reject_reason,
         }),
       },
     });
+
+    if (status === "ACTIVE" && ad.anonymous_id && isAdmin) {
+      await prisma.Anonymous.update({
+        where: { id: ad.anonymous_id },
+        data: { approved_by_admin_id: req.user.id },
+      });
+    }
+
+    if (isAdmin && ["ACTIVE", "REJECTED"].includes(status)) {
+      const ownerContact = await getAdOwnerContact(ad);
+
+      if (ownerContact?.email) {
+        sendAdStatusDecisionEmail({
+          to: ownerContact.email,
+          adTitle: ad.title,
+          status,
+          reason: reject_reason,
+          changedAt: statusChangedAt,
+        }).catch((error) => {
+          console.error("Failed to send ad status decision email:", error.message);
+        });
+      }
+    }
 
     await deleteCachePattern("ads:list:*");
     await deleteCachePattern("userAds:*");
@@ -977,6 +1317,10 @@ exports.assignAdmin = async (req, res) => {
         admin_id,
       },
     });
+
+    await deleteCachePattern("ads:list:*");
+    await deleteCachePattern("userAds:*");
+    await deleteCachePattern("sections:*");
 
     return res.json({
       success: true,
@@ -1212,7 +1556,7 @@ exports.getUserAds = async (req, res) => {
     }
 
     const profileWhere = {
-      OR: [{ user_id: userId }, { admin_id: userId }],
+      OR: [{ subuser_id: userId }, { admin_id: userId }],
     };
 
     const filtersWhere = buildAdsWhere(req.query, canViewAllStatuses, {

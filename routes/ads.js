@@ -22,8 +22,7 @@ const { optionalAuth } = require("../middlewares/optionalAuthMiddleware");
 // Ads CRUD
 router.post(
   "/create/:table_id",
-  authenticate,
-  authorize("ADMIN", "SUBUSER"),
+  optionalAuth,
   createAd,
 );
 router.patch(

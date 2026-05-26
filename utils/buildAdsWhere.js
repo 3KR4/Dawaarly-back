@@ -25,8 +25,32 @@ const addExactString = (filters, field, value) => {
   if (isFilled(value)) filters.push({ [field]: String(value).trim() });
 };
 
+const addNotString = (filters, field, value) => {
+  if (isFilled(value)) filters.push({ [field]: { not: String(value).trim() } });
+};
+
 const addBoolean = (filters, field, value) => {
   if (isFilled(value)) filters.push({ [field]: toBoolean(value) });
+};
+
+const addOwnerFilter = (filters, query) => {
+  if (query.owner === "dawaarly") {
+    filters.push({ admin_id: { not: null } });
+    return;
+  }
+
+  const ownerId = isFilled(query.owner_id) ? toNumber(query.owner_id) : null;
+  if (!ownerId) return;
+
+  if (query.owner_type === "subuser") {
+    filters.push({ subuser_id: ownerId });
+  } else if (query.owner_type === "user") {
+    filters.push({ user_id: ownerId });
+  } else if (query.owner_type === "admin") {
+    filters.push({ admin_id: ownerId });
+  } else if (query.owner_type === "anonymous") {
+    filters.push({ anonymous_id: ownerId });
+  }
 };
 
 const getAllowedDynamicFields = (tableId) => {
@@ -61,6 +85,8 @@ const buildAdsWhere = (query, isAdmin, options = {}) => {
     filters.push({ status: "ACTIVE" });
   } else if (isFilled(query.status)) {
     filters.push({ status: String(query.status).trim() });
+  } else {
+    addNotString(filters, "status", query.exclude_status);
   }
 
   if (isFilled(query.search)) {
@@ -79,6 +105,8 @@ const buildAdsWhere = (query, isAdmin, options = {}) => {
   addExactNumber(filters, "area_id", query.area_id);
   addExactNumber(filters, "compound_id", query.compound_id);
   addExactString(filters, "currency", query.currency);
+  addOwnerFilter(filters, query);
+
   if (!options.skipPriceRange) {
     addRange(filters, "price", query.min_price, query.max_price);
   }

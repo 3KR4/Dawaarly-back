@@ -28,5 +28,6 @@ module.exports = {
     "is_verified",
     "reject_reason",
     "featured_priority",
+    "anonymous",
   ],
 };

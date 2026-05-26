@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const { authenticate } = require("../middlewares/authMiddleware");
+const { optionalAuth } = require("../middlewares/optionalAuthMiddleware");
 const {
   uploadImages,
   deleteImage,
@@ -11,7 +12,7 @@ const upload = multer();
 
 router.post(
   "/:entity_type/:table_id/:entity_id",
-  authenticate,
+  optionalAuth,
   upload.array("files"),
   uploadImages,
 );

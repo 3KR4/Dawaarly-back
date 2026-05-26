@@ -2,6 +2,44 @@ const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 const cloudinary = require("../utils/cloudinary");
 
+const OVERLAY_PUBLIC_ID = "Dawaarly-Overlay_yath5x";
+const OVERLAY_GRAVITIES = [
+  "north_west",
+  "north_east",
+  "south_west",
+  "south_east",
+  "north",
+  "south",
+  "east",
+  "west",
+];
+
+const getRandomOverlayTransformation = () => {
+  const gravity =
+    OVERLAY_GRAVITIES[Math.floor(Math.random() * OVERLAY_GRAVITIES.length)];
+
+  return {
+    overlay: OVERLAY_PUBLIC_ID,
+    gravity,
+    width: 0.22,
+    flags: "relative",
+    opacity: 70,
+    x: 18,
+    y: 18,
+  };
+};
+
+const normalizeOrderValues = (orders) => {
+  if (orders === undefined || orders === null) return [];
+
+  const rawOrders = Array.isArray(orders) ? orders : String(orders).split(",");
+
+  return rawOrders.map((order) => {
+    const normalizedOrder = Number(order);
+    return Number.isFinite(normalizedOrder) ? normalizedOrder : null;
+  });
+};
+
 // =========================
 // HELPER: Upload Single Image
 // =========================
@@ -17,7 +55,11 @@ const uploadSingleImage = (
     const uploadStream = cloudinary.uploader.upload_stream(
       {
         folder: `${entityType.toLowerCase()}/${entityId}`,
-        transformation: [{ fetch_format: "auto" }, { quality: "auto:good" }],
+        transformation: [
+          ...(entityType === "AD" ? [getRandomOverlayTransformation()] : []),
+          { fetch_format: "auto" },
+          { quality: "auto:good" },
+        ],
       },
       async (error, result) => {
         if (error) return reject(error);
@@ -61,6 +103,7 @@ exports.uploadImages = async (req, res) => {
 
     const coverIndex =
       req.body.cover_index !== undefined ? Number(req.body.cover_index) : 0;
+    const requestedOrders = normalizeOrderValues(req.body.orders);
 
     if (!entityType || !entityId) {
       return res.status(400).json({
@@ -74,6 +117,16 @@ exports.uploadImages = async (req, res) => {
       });
     }
 
+    const lastImage = await prisma.Images.findFirst({
+      where: {
+        entity_type: entityType,
+        entity_id: entityId,
+        ...(tableId !== null ? { table_id: tableId } : {}),
+      },
+      orderBy: [{ order: "desc" }, { id: "desc" }],
+    });
+    const nextOrderStart = lastImage ? lastImage.order + 1 : 0;
+
     const uploadedImages = await Promise.all(
       req.files.map((file, index) =>
         uploadSingleImage(
@@ -81,7 +134,7 @@ exports.uploadImages = async (req, res) => {
           entityType,
           entityId,
           tableId,
-          index,
+          requestedOrders[index] ?? nextOrderStart + index,
           index === coverIndex,
         ),
       ),
