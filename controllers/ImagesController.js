@@ -21,7 +21,7 @@ const getRandomOverlayTransformation = () => {
   return {
     overlay: OVERLAY_PUBLIC_ID,
     gravity,
-    width: 0.22,
+    width: 0.31,
     flags: "relative",
     opacity: 70,
     x: 18,
