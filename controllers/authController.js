@@ -12,6 +12,82 @@ const {
   checkSuperAdminPriority,
 } = require("../middlewares/checkSuperAdminPriority");
 
+const normalizePermissions = (permissions) => {
+  if (!permissions) return [];
+  if (Array.isArray(permissions)) {
+    return [...new Set(permissions.filter(Boolean))];
+  }
+
+  if (typeof permissions === "string") {
+    const trimmed = permissions.trim();
+    if (!trimmed) return [];
+
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) return normalizePermissions(parsed);
+    } catch (_) {
+      return normalizePermissions(
+        trimmed
+          .split(",")
+          .map((permission) => permission.trim())
+          .filter(Boolean),
+      );
+    }
+
+    return [trimmed];
+  }
+
+  return [];
+};
+
+const getUserPermissions = (user) => {
+  return normalizePermissions(user?.permissions);
+};
+
+const serializePermissions = (permissions) =>
+  normalizePermissions(permissions);
+
+const normalizeInterests = (interests) => {
+  if (!interests) return [];
+  if (Array.isArray(interests)) return interests.filter((item) => item !== null && item !== undefined);
+
+  if (typeof interests === "string") {
+    const trimmed = interests.trim();
+    if (!trimmed) return [];
+
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) return normalizeInterests(parsed);
+    } catch (_) {
+      return trimmed
+        .split(",")
+        .map((item) => Number(item.trim()) || item.trim())
+        .filter(Boolean);
+    }
+  }
+
+  return [];
+};
+
+const serializeInterests = (interests) =>
+  JSON.stringify(normalizeInterests(interests));
+
+const normalizeLanguage = (language) => {
+  if (language === undefined || language === null || language === "") {
+    return undefined;
+  }
+
+  return ["ar", "en"].includes(language) ? language : null;
+};
+
+const normalizeTheme = (theme) => {
+  if (theme === undefined || theme === null || theme === "") {
+    return undefined;
+  }
+
+  return ["light", "dark"].includes(theme) ? theme : null;
+};
+
 // ================= RATE LIMIT =================
 const authLimiter = rateLimit({
   windowMs: 60 * 1000,
@@ -35,7 +111,7 @@ function createAccessToken(user) {
     {
       id: user.id,
       role: user.user_type,
-      permissions: user.permissions || [],
+      permissions: getUserPermissions(user),
       is_super_admin: user.is_super_admin || false,
     },
     process.env.JWT_SECRET,
@@ -102,7 +178,7 @@ async function serializeUser(user, requester = null) {
 
     language: user.language,
     theme: user.theme,
-    interests: user.interests || [],
+    interests: normalizeInterests(user.interests),
 
     // public
     tiktok_link: user.tiktok_link,
@@ -112,7 +188,7 @@ async function serializeUser(user, requester = null) {
     ...(canSeeSensitive && {
       subscription_ads_limit: user.subscription_ads_limit || 0,
       user_type: user.user_type,
-      permissions: user.permissions || [],
+      permissions: getUserPermissions(user),
       is_super_admin: user.is_super_admin || false,
     }),
   };
@@ -133,7 +209,7 @@ async function getActiveAdsCount(userId) {
       prismaModel.count({
         where: {
           status: "ACTIVE",
-          user_id: userId,
+          subuser_id: userId,
         },
       }),
     ),
@@ -154,18 +230,18 @@ async function getActiveAdsCountsMap(userIds = []) {
       const ads = await prismaModel.findMany({
         where: {
           status: "ACTIVE",
-          user_id: {
+          subuser_id: {
             in: userIds,
           },
         },
         select: {
-          user_id: true,
+          subuser_id: true,
         },
       });
 
       ads.forEach((ad) => {
-        if (ad.user_id) {
-          countsMap[ad.user_id] = (countsMap[ad.user_id] || 0) + 1;
+        if (ad.subuser_id) {
+          countsMap[ad.subuser_id] = (countsMap[ad.subuser_id] || 0) + 1;
         }
       });
     }),
@@ -198,6 +274,15 @@ exports.register = [
       if (!full_name || !email || !password || !phone) {
         return res.status(400).json({
           message: "Missing required fields",
+        });
+      }
+
+      const normalizedLanguage = normalizeLanguage(language);
+      const normalizedTheme = normalizeTheme(theme);
+
+      if (normalizedLanguage === null || normalizedTheme === null) {
+        return res.status(400).json({
+          message: "Invalid language or theme",
         });
       }
 
@@ -238,9 +323,9 @@ exports.register = [
           country_id,
           governorate_id,
           city_id,
-          language: language || "en",
-          theme: theme || "light",
-          interests: interests || [],
+          language: normalizedLanguage || "ar",
+          theme: normalizedTheme || "light",
+          interests: serializeInterests(interests),
           verification_code: verificationCode,
           verification_expiry: new Date(Date.now() + 10 * 60 * 1000),
         },
@@ -670,6 +755,15 @@ exports.updateProfile = async (req, res) => {
       );
     };
 
+    const normalizedLanguage = normalizeLanguage(language);
+    const normalizedTheme = normalizeTheme(theme);
+
+    if (normalizedLanguage === null || normalizedTheme === null) {
+      return res.status(400).json({
+        message: "Invalid language or theme",
+      });
+    }
+
     const data = cleanData({
       full_name,
       phone,
@@ -678,9 +772,10 @@ exports.updateProfile = async (req, res) => {
       country_id,
       governorate_id,
       city_id,
-      language,
-      theme,
-      interests,
+      language: normalizedLanguage,
+      theme: normalizedTheme,
+      interests:
+        interests !== undefined ? serializeInterests(interests) : undefined,
     });
 
     const user = await prisma.Users.update({
@@ -763,10 +858,7 @@ exports.setSuperAdmin = async (req, res) => {
 exports.updateSubscriptionLimit = async (req, res) => {
   try {
     const requester = req.user;
-    if (
-      !requester.is_super_admin &&
-      !requester.permissions?.includes("CHANGE_SUBUSER_LIMIT")
-    ) {
+    if (!requester.is_super_admin) {
       return res.status(403).json({
         message: "Forbidden: Not allowed to change subscription limit",
       });
@@ -832,7 +924,7 @@ exports.changeUserRole = async (req, res) => {
       // تحديث رول و permissions افتراضية
       const updateData = {
         user_type: "ADMIN",
-        permissions: ["CHANGE_ADS_STATUS"],
+        permissions: serializePermissions(["CHANGE_ADS_STATUS"]),
       };
 
       await prisma.Users.update({
@@ -846,11 +938,8 @@ exports.changeUserRole = async (req, res) => {
     }
 
     if (user_type === "SUBUSER") {
-      // لازم يكون عنده صلاحية MAKE_SUBSCRIBER
-      if (
-        !requester.is_super_admin &&
-        !requester.permissions?.includes("MAKE_SUBSCRIBER")
-      ) {
+      // لازم يكون سوبر أدمن
+      if (!requester.is_super_admin) {
         return res.status(403).json({
           message: "You don't have permission to make someone a subscriber",
         });
@@ -880,7 +969,7 @@ exports.changeUserRole = async (req, res) => {
 
       const updateData = {
         user_type: "USER",
-        permissions: [], // أو صلاحيات افتراضية للـ USER العادي
+        permissions: serializePermissions([]),
         subscription_ads_limit: 0,
       };
 
@@ -930,9 +1019,11 @@ exports.updatePermissions = async (req, res) => {
         message: "Permissions only for admins",
       });
 
+    const normalizedPermissions = normalizePermissions(permissions);
+
     const updated = await prisma.Users.update({
       where: { id: userId },
-      data: { permissions },
+      data: { permissions: serializePermissions(normalizedPermissions) },
     });
 
     res.json({
@@ -1072,22 +1163,35 @@ exports.getAllUsers = async (req, res) => {
     }
 
     // فلتر الصلاحيات (أكثر من قيمة)
-    if (permissions) {
-      const permsArray = permissions.split(",");
+    const permsArray = normalizePermissions(permissions);
+    let total;
+    let users;
 
-      where.permissions = {
-        array_contains: permsArray,
-      };
+    if (permsArray.length) {
+      const allMatchingUsers = await prisma.Users.findMany({
+        where,
+        orderBy: { created_at: "desc" },
+      });
+
+      const permissionFilteredUsers = allMatchingUsers.filter((user) => {
+        const userPermissions = normalizePermissions(user.permissions);
+        return permsArray.every((permission) =>
+          userPermissions.includes(permission),
+        );
+      });
+
+      total = permissionFilteredUsers.length;
+      users = permissionFilteredUsers.slice(skip, skip + limit);
+    } else {
+      total = await prisma.Users.count({ where });
+
+      users = await prisma.Users.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { created_at: "desc" },
+      });
     }
-
-    const total = await prisma.Users.count({ where });
-
-    const users = await prisma.Users.findMany({
-      where,
-      skip,
-      take: limit,
-      orderBy: { created_at: "desc" },
-    });
 
     const userIds = users.map((u) => u.id);
 

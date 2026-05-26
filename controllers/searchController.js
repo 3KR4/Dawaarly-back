@@ -9,9 +9,9 @@ const clampLimit = (value) => {
   return Math.min(Math.max(limit, 1), 10);
 };
 
-const jsonSearch = (text) => ({
+const tagsSearch = (text) => ({
   tags: {
-    string_contains: text,
+    contains: text,
   },
 });
 
@@ -21,7 +21,7 @@ const buildAdWhere = (text, withTags = true) => {
     { description: { contains: text } },
   ];
 
-  if (withTags) OR.push(jsonSearch(text));
+  if (withTags) OR.push(tagsSearch(text));
 
   return {
     status: "ACTIVE",
@@ -41,7 +41,7 @@ const buildBlogWhere = (text, isAdmin = false, withTags = true) => {
     { meta_desc_ar: { contains: text } },
   ];
 
-  if (withTags) OR.push(jsonSearch(text));
+  if (withTags) OR.push(tagsSearch(text));
 
   return {
     ...(isAdmin ? {} : { is_published: true }),
