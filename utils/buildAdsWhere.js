@@ -39,17 +39,32 @@ const addOwnerFilter = (filters, query) => {
     return;
   }
 
-  const ownerId = isFilled(query.owner_id) ? toNumber(query.owner_id) : null;
+  const ownerId = isFilled(query.owner_id)
+    ? toNumber(query.owner_id)
+    : isFilled(query.user)
+      ? toNumber(query.user)
+      : null;
   if (!ownerId) return;
 
-  if (query.owner_type === "subuser") {
+  const ownerType = query.owner_type || query.user_type;
+
+  if (ownerType === "subuser") {
     filters.push({ subuser_id: ownerId });
-  } else if (query.owner_type === "user") {
+  } else if (ownerType === "user") {
     filters.push({ user_id: ownerId });
-  } else if (query.owner_type === "admin") {
+  } else if (ownerType === "admin") {
     filters.push({ admin_id: ownerId });
-  } else if (query.owner_type === "anonymous") {
+  } else if (ownerType === "anonymous") {
     filters.push({ anonymous_id: ownerId });
+  } else {
+    filters.push({
+      OR: [
+        { subuser_id: ownerId },
+        { user_id: ownerId },
+        { admin_id: ownerId },
+        { anonymous_id: ownerId },
+      ],
+    });
   }
 };
 

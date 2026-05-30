@@ -4,13 +4,68 @@ const cloudinary = require("../utils/cloudinary");
 const { pagination } = require("../utils/pagination");
 const slugify = require("slugify");
 
+const normalizeTags = (tags) => {
+  if (tags === undefined) return undefined;
+  if (tags === null || tags === "") return "";
+
+  if (Array.isArray(tags)) {
+    return tags.map((tag) => String(tag).trim()).filter(Boolean).join(",");
+  }
+
+  if (typeof tags === "string") {
+    try {
+      const parsed = JSON.parse(tags);
+      if (Array.isArray(parsed)) {
+        return parsed.map((tag) => String(tag).trim()).filter(Boolean).join(",");
+      }
+    } catch {}
+
+    return tags
+      .split(",")
+      .map((tag) => tag.trim())
+      .filter(Boolean)
+      .join(",");
+  }
+
+  return "";
+};
+
+const normalizeContent = (content) => {
+  if (content === undefined) return undefined;
+  if (content === null || content === "") return JSON.stringify([]);
+  if (Array.isArray(content)) return JSON.stringify(content);
+
+  if (typeof content === "string") {
+    try {
+      const parsed = JSON.parse(content);
+      return JSON.stringify(Array.isArray(parsed) ? parsed : []);
+    } catch {
+      return JSON.stringify([]);
+    }
+  }
+
+  return JSON.stringify([]);
+};
+
+const parseContent = (content) => {
+  if (!content) return [];
+  if (Array.isArray(content)) return content;
+
+  try {
+    const parsed = JSON.parse(content);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
 // =============================
 // Helper: Resolve Images inside blocks
 // =============================
 const resolveContentImages = (content, imageMap) => {
-  if (!content) return [];
+  const blocks = parseContent(content);
 
-  return content.map((block) => {
+  return blocks.map((block) => {
     if (block.type === "image") {
       return {
         ...block,
@@ -100,7 +155,9 @@ exports.createBlog = async (req, res) => {
         meta_desc_en,
         meta_desc_ar,
 
-        tags,
+        tags: normalizeTags(tags),
+        content_en: normalizeContent(content_en),
+        content_ar: normalizeContent(content_ar),
 
         author_id: req.user?.id || null,
         is_published: false,
@@ -156,8 +213,8 @@ exports.updateBlog = async (req, res) => {
         ...(description_en && { description_en }),
         ...(description_ar && { description_ar }),
 
-        ...(content_en && { content_en }),
-        ...(content_ar && { content_ar }),
+        ...(content_en !== undefined && { content_en: normalizeContent(content_en) }),
+        ...(content_ar !== undefined && { content_ar: normalizeContent(content_ar) }),
 
         ...(meta_title_en && { meta_title_en }),
         ...(meta_title_ar && { meta_title_ar }),
@@ -165,7 +222,7 @@ exports.updateBlog = async (req, res) => {
         ...(meta_desc_en && { meta_desc_en }),
         ...(meta_desc_ar && { meta_desc_ar }),
 
-        ...(tags && { tags }),
+        ...(tags !== undefined && { tags: normalizeTags(tags) }),
 
         ...(reading_time && { reading_time }),
 
@@ -234,16 +291,17 @@ exports.getBlogs = async (req, res) => {
     const { search, status } = req.query;
 
     const isAdmin = req.user?.user_type === "ADMIN";
+    const canViewAllStatuses = isAdmin && req.query.scope === "dashboard";
 
     let where = {};
 
     // ✅ user يشوف published بس
-    if (!isAdmin) {
+    if (!canViewAllStatuses) {
       where.is_published = true;
     }
 
     // ✅ admin يفلتر بالـ status (اختياري)
-    if (isAdmin && status) {
+    if (canViewAllStatuses && status) {
       if (status === "published") where.is_published = true;
       if (status === "unpublished") where.is_published = false;
     }
@@ -340,6 +398,7 @@ exports.getOneBlog = async (req, res) => {
     const { slug } = req.params;
 
     const isAdmin = req.user?.user_type === "ADMIN";
+    const canViewUnpublished = isAdmin && req.query.scope === "dashboard";
 
     const blog = await prisma.Blogs.findUnique({
       where: { slug },
@@ -357,7 +416,7 @@ exports.getOneBlog = async (req, res) => {
       return res.status(404).json({ message: "Blog not found" });
     }
 
-    if (!isAdmin && !blog.is_published) {
+    if (!blog.is_published && !canViewUnpublished) {
       return res.status(404).json({ message: "Blog not found" });
     }
 

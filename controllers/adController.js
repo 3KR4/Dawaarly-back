@@ -672,8 +672,85 @@ const normalizeAnonymousContact = (anonymous = {}) => ({
   phone: anonymous.phone ? String(anonymous.phone).trim() : null,
 });
 
+const normalizeComparableText = (value) =>
+  String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+
+const normalizeComparablePhone = (value) =>
+  String(value || "").replace(/[^\d+]/g, "");
+
+const getEditDistance = (left, right) => {
+  if (left === right) return 0;
+  if (!left) return right.length;
+  if (!right) return left.length;
+
+  const previous = Array.from({ length: right.length + 1 }, (_, i) => i);
+
+  for (let i = 1; i <= left.length; i += 1) {
+    let diagonal = previous[0];
+    previous[0] = i;
+
+    for (let j = 1; j <= right.length; j += 1) {
+      const temp = previous[j];
+      previous[j] = Math.min(
+        previous[j] + 1,
+        previous[j - 1] + 1,
+        diagonal + (left[i - 1] === right[j - 1] ? 0 : 1),
+      );
+      diagonal = temp;
+    }
+  }
+
+  return previous[right.length];
+};
+
+const getSimilarity = (left, right) => {
+  if (!left || !right) return 0;
+  const maxLength = Math.max(left.length, right.length);
+  if (!maxLength) return 1;
+
+  return 1 - getEditDistance(left, right) / maxLength;
+};
+
+const areSimilarTexts = (left, right, threshold = 0.86) =>
+  left === right || getSimilarity(left, right) >= threshold;
+
+const areSimilarPhones = (left, right) => {
+  if (!left || !right) return false;
+  if (left === right) return true;
+
+  const leftTail = left.slice(-8);
+  const rightTail = right.slice(-8);
+
+  return leftTail.length >= 8 && leftTail === rightTail;
+};
+
+const isSameAnonymousContact = (candidate, contact) => {
+  const candidateName = normalizeComparableText(candidate.full_name);
+  const contactName = normalizeComparableText(contact.full_name);
+  const candidateEmail = normalizeComparableText(candidate.email);
+  const contactEmail = normalizeComparableText(contact.email);
+  const candidatePhone = normalizeComparablePhone(candidate.phone);
+  const contactPhone = normalizeComparablePhone(contact.phone);
+
+  if (contactEmail && areSimilarTexts(candidateEmail, contactEmail, 0.92)) {
+    return true;
+  }
+
+  if (contactPhone && areSimilarPhones(candidatePhone, contactPhone)) {
+    return true;
+  }
+
+  if (!candidateName || !contactName) return false;
+
+  return areSimilarTexts(candidateName, contactName);
+};
+
 const createAnonymousOwner = async (anonymous, req) => {
   const contact = normalizeAnonymousContact(anonymous);
+  const ipAddress = getRequestIp(req);
 
   if (!contact.full_name) {
     const error = new Error("Anonymous full_name is required");
@@ -687,10 +764,32 @@ const createAnonymousOwner = async (anonymous, req) => {
     throw error;
   }
 
+  if (ipAddress) {
+    const candidates = await prisma.Anonymous.findMany({
+      where: { ip_address: ipAddress },
+      orderBy: { updated_at: "desc" },
+      take: 25,
+    });
+    const existingAnonymous = candidates.find((candidate) =>
+      isSameAnonymousContact(candidate, contact),
+    );
+
+    if (existingAnonymous) {
+      return prisma.Anonymous.update({
+        where: { id: existingAnonymous.id },
+        data: {
+          full_name: contact.full_name || existingAnonymous.full_name,
+          email: contact.email || existingAnonymous.email,
+          phone: contact.phone || existingAnonymous.phone,
+        },
+      });
+    }
+  }
+
   return prisma.Anonymous.create({
     data: {
       ...contact,
-      ip_address: getRequestIp(req),
+      ip_address: ipAddress,
     },
   });
 };
@@ -1344,6 +1443,8 @@ exports.getAllAds = async (req, res) => {
 
     const { page, limit, skip } = pagination(req.query);
     const isAdmin = req.user?.is_super_admin || req.user?.user_type === "ADMIN";
+    const isDashboardRequest = req.query.scope === "dashboard";
+    const canViewAllStatuses = isAdmin && isDashboardRequest;
     const table_id = req.query.table_id ? Number(req.query.table_id) : null;
 
     if (req.query.table_id && !table_id) {
@@ -1353,11 +1454,11 @@ exports.getAllAds = async (req, res) => {
       });
     }
 
-    const where = buildAdsWhere(req.query, isAdmin, {
+    const where = buildAdsWhere(req.query, canViewAllStatuses, {
       includeDynamic: Boolean(table_id),
       skipPriceRange: true,
     });
-    const areaMetaWhere = buildAdsWhere(req.query, isAdmin, {
+    const areaMetaWhere = buildAdsWhere(req.query, canViewAllStatuses, {
       includeDynamic: Boolean(table_id),
       skipPriceRange: true,
       skipAreaRange: true,
@@ -1514,6 +1615,20 @@ exports.getAd = async (req, res) => {
     }
 
     const userId = req.user?.id || null;
+    const isAdmin = req.user?.is_super_admin || req.user?.user_type === "ADMIN";
+    const isDashboardRequest = req.query.scope === "dashboard";
+    const isOwner =
+      userId &&
+      [ad.user_id, ad.subuser_id, ad.admin_id].filter(Boolean).includes(userId);
+    const canViewInactiveAd = isOwner || (isAdmin && isDashboardRequest);
+
+    if (ad.status !== "ACTIVE" && !canViewInactiveAd) {
+      return res.status(404).json({
+        success: false,
+        message: "Ad not found",
+      });
+    }
+
     const stats = await trackAdView({
       prismaModel,
       entityId: adId,
@@ -1538,7 +1653,8 @@ exports.getUserAds = async (req, res) => {
     const { page, limit, skip } = pagination(req.query);
     const viewerId = req.user?.id || null;
     const isAdmin = req.user?.is_super_admin || req.user?.user_type === "ADMIN";
-    const canViewAllStatuses = isAdmin || viewerId === userId;
+    const isDashboardRequest = req.query.scope === "dashboard";
+    const canViewAllStatuses = viewerId === userId || (isAdmin && isDashboardRequest);
     const table_id = req.query.table_id ? Number(req.query.table_id) : null;
 
     if (!userId) {
