@@ -2,7 +2,7 @@ const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 const cloudinary = require("../utils/cloudinary");
 
-const OVERLAY_PUBLIC_ID = "Dawaarly-Overlay_yath5x";
+const OVERLAY_PUBLIC_ID = "watermark_l1ts5d";
 const OVERLAY_GRAVITIES = [
   "north_west",
   "north_east",
@@ -21,7 +21,7 @@ const getRandomOverlayTransformation = () => {
   return {
     overlay: OVERLAY_PUBLIC_ID,
     gravity,
-    width: 0.22,
+    width: 0.31,
     flags: "relative",
     opacity: 70,
     x: 18,

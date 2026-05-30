@@ -194,62 +194,116 @@ async function serializeUser(user, requester = null) {
   };
 }
 
-// ================= ACTIVE ADS COUNT =================
+// ================= ADS COUNTS =================
 const getAvailableAdTables = () =>
   Object.keys(tableRegistry)
     .map(Number)
     .map((table_id) => ({ table_id, prismaModel: getModel(table_id) }))
     .filter((entry) => entry.prismaModel);
 
-async function getActiveAdsCount(userId) {
+const getUserAdsOwnerField = (user) => {
+  if (user?.user_type === "SUBUSER") return "subuser_id";
+  if (user?.user_type === "USER") return "user_id";
+  if (user?.user_type === "ADMIN" || user?.is_super_admin) return "admin_id";
+
+  return null;
+};
+
+const createEmptyAdsCounts = () => ({
+  approved_ads_count: 0,
+  pending_ads_count: 0,
+  active_ads_count: 0,
+});
+
+async function getUserAdsCounts(user) {
+  const ownerField = getUserAdsOwnerField(user);
+  const counts = createEmptyAdsCounts();
+
+  if (!ownerField || !user?.id) return counts;
+
   const tables = getAvailableAdTables();
 
-  const counts = await Promise.all(
+  const tableCounts = await Promise.all(
     tables.map(({ prismaModel }) =>
-      prismaModel.count({
-        where: {
-          status: "ACTIVE",
-          subuser_id: userId,
-        },
-      }),
+      Promise.all([
+        prismaModel.count({
+          where: { [ownerField]: user.id, status: { not: "PENDING" } },
+        }),
+        prismaModel.count({
+          where: { [ownerField]: user.id, status: "PENDING" },
+        }),
+        prismaModel.count({
+          where: { [ownerField]: user.id, status: "ACTIVE" },
+        }),
+      ]),
     ),
   );
 
-  return counts.reduce((sum, count) => sum + count, 0);
+  tableCounts.forEach(([approved, pending, active]) => {
+    counts.approved_ads_count += approved;
+    counts.pending_ads_count += pending;
+    counts.active_ads_count += active;
+  });
+
+  return counts;
 }
 
-async function getActiveAdsCountsMap(userIds = []) {
+async function getUserAdsCountsMap(users = []) {
   const countsMap = {};
 
-  if (!userIds.length) return countsMap;
+  if (!users.length) return countsMap;
+
+  const groupedUsers = users.reduce((groups, user) => {
+    const ownerField = getUserAdsOwnerField(user);
+    if (!ownerField) return groups;
+
+    if (!groups[ownerField]) groups[ownerField] = [];
+    groups[ownerField].push(user.id);
+
+    return groups;
+  }, {});
+
+  users.forEach((user) => {
+    countsMap[user.id] = createEmptyAdsCounts();
+  });
 
   const tables = getAvailableAdTables();
 
   await Promise.all(
-    tables.map(async ({ prismaModel }) => {
-      const ads = await prismaModel.findMany({
-        where: {
-          status: "ACTIVE",
-          subuser_id: {
-            in: userIds,
+    tables.flatMap(({ prismaModel }) =>
+      Object.entries(groupedUsers).map(async ([ownerField, userIds]) => {
+        const ads = await prismaModel.findMany({
+          where: {
+            [ownerField]: {
+              in: userIds,
+            },
           },
-        },
-        select: {
-          subuser_id: true,
-        },
-      });
+          select: {
+            [ownerField]: true,
+            status: true,
+          },
+        });
 
-      ads.forEach((ad) => {
-        if (ad.subuser_id) {
-          countsMap[ad.subuser_id] = (countsMap[ad.subuser_id] || 0) + 1;
-        }
-      });
-    }),
+        ads.forEach((ad) => {
+          const ownerId = ad[ownerField];
+          if (!ownerId || !countsMap[ownerId]) return;
+
+          if (ad.status === "PENDING") {
+            countsMap[ownerId].pending_ads_count += 1;
+            return;
+          }
+
+          countsMap[ownerId].approved_ads_count += 1;
+          if (ad.status === "ACTIVE") {
+            countsMap[ownerId].active_ads_count += 1;
+          }
+        });
+      }),
+    ),
   );
 
   return countsMap;
 }
-
 // ================= REGISTER =================
 exports.register = [
   authLimiter,
@@ -792,6 +846,90 @@ exports.updateProfile = async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 };
+exports.updateUserBasicInfo = async (req, res) => {
+  try {
+    const requester = req.user;
+    const userId = Number(req.params.id);
+
+    if (!requester?.is_super_admin) {
+      return res.status(403).json({
+        message: "Only super admin can update user basic info",
+      });
+    }
+
+    if (isNaN(userId)) {
+      return res.status(400).json({ message: "Invalid user id" });
+    }
+
+    const {
+      full_name,
+      phone,
+      governorate_id,
+      city_id,
+      country_id,
+      birth_date,
+      gender,
+    } = req.body;
+
+    const targetUser = await prisma.Users.findUnique({
+      where: { id: userId },
+    });
+
+    if (!targetUser) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    if (phone) {
+      const existingPhone = await prisma.Users.findFirst({
+        where: {
+          phone,
+          id: { not: userId },
+        },
+      });
+
+      if (existingPhone) {
+        return res.status(400).json({
+          message: "Phone number is already used by another user",
+        });
+      }
+    }
+
+    const cleanData = (obj) =>
+      Object.fromEntries(
+        Object.entries(obj).filter(([_, v]) => v !== undefined)
+      );
+
+    const data = cleanData({
+      full_name,
+      phone,
+      governorate_id,
+      city_id,
+      country_id,
+      gender,
+      birth_date: birth_date ? new Date(birth_date) : undefined,
+    });
+
+    const updated = await prisma.Users.update({
+      where: { id: userId },
+      data,
+    });
+
+    res.json({
+      message: "User basic info updated successfully",
+      user: await serializeUser(updated, requester),
+    });
+  } catch (error) {
+    console.error(error);
+
+    if (error.code === "P2002") {
+      return res.status(400).json({
+        message: "Phone or email already exists",
+      });
+    }
+
+    res.status(500).json({ message: "Server error" });
+  }
+};
 exports.updateSubuserProfile = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -1193,14 +1331,12 @@ exports.getAllUsers = async (req, res) => {
       });
     }
 
-    const userIds = users.map((u) => u.id);
-
-    const countsMap = await getActiveAdsCountsMap(userIds);
+    const countsMap = await getUserAdsCountsMap(users);
 
     const serializedUsers = await Promise.all(
       users.map(async (u) => {
         const base = await serializeUser(u, requester);
-        base.active_ads_count = countsMap[u.id] || 0;
+        Object.assign(base, countsMap[u.id] || createEmptyAdsCounts());
         return base;
       }),
     );
@@ -1232,12 +1368,12 @@ exports.getUser = async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    const [serialized, activeAdsCount] = await Promise.all([
+    const [serialized, adsCounts] = await Promise.all([
       serializeUser(user, requester),
-      getActiveAdsCount(user.id),
+      getUserAdsCounts(user),
     ]);
 
-    serialized.active_ads_count = activeAdsCount;
+    Object.assign(serialized, adsCounts);
 
     res.json(serialized);
   } catch (error) {

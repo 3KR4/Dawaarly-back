@@ -13,6 +13,7 @@ const {
   changePassword,
   getAllUsers,
   updateProfile,
+  updateUserBasicInfo,
   updatePermissions,
   changeUserRole,
   updateSubuserProfile,
@@ -37,6 +38,13 @@ router.post("/logout", logout);
 
 // User management
 router.patch("/profile", authenticate, updateProfile);
+
+router.patch(
+  "/users/:id/basic-info",
+  authenticate,
+  authorize("SUPER_ADMIN"),
+  updateUserBasicInfo,
+);
 
 router.patch("/subuser-profile", authenticate, updateSubuserProfile);
 
