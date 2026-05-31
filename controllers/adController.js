@@ -1026,7 +1026,10 @@ exports.updateAd = async (req, res) => {
     const isAdmin =
       user?.permissions?.includes("UPDATE_AD") || user?.is_super_admin;
 
-    const isOwner = ad.subuser_id === user.id;
+    const isOwner =
+      ad.subuser_id === user.id ||
+      ad.user_id === user.id ||
+      ad.admin_id === user.id;
 
     if (!isAdmin && !isOwner) {
       return res.status(403).json({
@@ -1068,7 +1071,7 @@ exports.updateAd = async (req, res) => {
     }
 
     // pending after edit
-    if (!isAdmin && ad.status === "ACTIVE") {
+    if (!isAdmin) {
       dataToUpdate.status = "PENDING";
       dataToUpdate.was_previously_approved = true;
     }
@@ -1148,7 +1151,10 @@ exports.deleteAd = async (req, res) => {
     // =========================
     const user = req.user;
 
-    const isOwner = ad.subuser_id === user.id;
+    const isOwner =
+      ad.subuser_id === user.id ||
+      ad.user_id === user.id ||
+      ad.admin_id === user.id;
 
     const canDelete =
       user?.is_super_admin || user?.permissions?.includes("DELETE_AD");
@@ -1237,7 +1243,10 @@ exports.changeAdStatus = async (req, res) => {
       req.user?.is_super_admin ||
       req.user?.permissions?.includes("CHANGE_ADS_STATUS");
 
-    const isOwner = ad.subuser_id === req.user.id;
+    const isOwner =
+      ad.subuser_id === req.user.id ||
+      ad.user_id === req.user.id ||
+      ad.admin_id === req.user.id;
 
     // =========================
     // VALID STATUS
@@ -1672,7 +1681,7 @@ exports.getUserAds = async (req, res) => {
     }
 
     const profileWhere = {
-      OR: [{ subuser_id: userId }, { admin_id: userId }],
+      OR: [{ subuser_id: userId }, { user_id: userId }, { admin_id: userId }],
     };
 
     const filtersWhere = buildAdsWhere(req.query, canViewAllStatuses, {
