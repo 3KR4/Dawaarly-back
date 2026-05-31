@@ -50,7 +50,7 @@ exports.authorizeOwnerOrSuperAdmin = async (req, res, next) => {
     // =========================
     const isSuperAdmin = req.user?.is_super_admin;
 
-    const isOwner = ad.subuser_id === req.user.id;
+    const isOwner = ad.subuser_id === req.user.id || ad.user_id === req.user.id; 
 
     if (!isOwner && !isSuperAdmin) {
       return res.status(403).json({

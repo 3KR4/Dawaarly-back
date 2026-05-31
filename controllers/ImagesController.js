@@ -2,7 +2,7 @@ const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 const cloudinary = require("../utils/cloudinary");
 
-const OVERLAY_PUBLIC_ID = "watermark_l1ts5d";
+const OVERLAY_PUBLIC_ID = "dawaarly_logo_shadow_xfhq09";
 const OVERLAY_GRAVITIES = [
   "north_west",
   "north_east",
