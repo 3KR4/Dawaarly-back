@@ -1,6 +1,41 @@
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 
+const parseLocalizedText = (value) => {
+  if (value === null || value === undefined) return null;
+
+  if (typeof value === "object" && !Array.isArray(value)) {
+    return value;
+  }
+
+  if (typeof value !== "string") {
+    return { en: "", ar: "" };
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return {
+        en: parsed.en || "",
+        ar: parsed.ar || "",
+      };
+    }
+  } catch {
+    // Existing rows may contain a plain string from before localization.
+  }
+
+  return { en: value, ar: value };
+};
+
+const stringifyLocalizedText = (value) => JSON.stringify(value);
+
+const formatSlider = (slider) => ({
+  ...slider,
+  title: parseLocalizedText(slider.title),
+  description: parseLocalizedText(slider.description),
+});
+
 exports.createSlider = async (req, res) => {
   try {
     const { title, description, link, is_active, order } = req.body;
@@ -111,13 +146,13 @@ exports.createSlider = async (req, res) => {
 
     const slider = await prisma.Sliders.create({
       data: {
-        title: {
+        title: stringifyLocalizedText({
           ar: title.ar.trim(),
           en: title.en.trim(),
-        },
+        }),
         description:
           normalizedDescription && Object.keys(normalizedDescription).length > 0
-            ? normalizedDescription
+            ? stringifyLocalizedText(normalizedDescription)
             : null,
         link: normalizedLink,
         is_active: normalizedIsActive,
@@ -126,7 +161,7 @@ exports.createSlider = async (req, res) => {
     });
 
     res.status(201).json({
-      ...slider,
+      ...formatSlider(slider),
       message: "slide has been created successfully",
     });
   } catch (error) {
@@ -178,10 +213,10 @@ exports.updateSlider = async (req, res) => {
         });
       }
 
-      data.title = {
+      data.title = stringifyLocalizedText({
         ar: title.ar.trim(),
         en: title.en.trim(),
-      };
+      });
     }
 
     if (description !== undefined) {
@@ -222,7 +257,7 @@ exports.updateSlider = async (req, res) => {
 
         data.description =
           Object.keys(normalizedDescription).length > 0
-            ? normalizedDescription
+            ? stringifyLocalizedText(normalizedDescription)
             : null;
       }
     }
@@ -287,7 +322,7 @@ exports.updateSlider = async (req, res) => {
       data,
     });
     res.json({
-      massage: "slide has updated successfully",
+      message: "slide has updated successfully",
     });
   } catch (error) {
     res.status(500).json({
@@ -363,7 +398,7 @@ exports.getOneSlider = async (req, res) => {
     });
 
     res.json({
-      ...slider,
+      ...formatSlider(slider),
       image: image || null,
     });
   } catch (error) {
@@ -439,7 +474,7 @@ exports.getSliders = async (req, res) => {
     }
 
     const formatted = sliders.map((slider) => ({
-      ...slider,
+      ...formatSlider(slider),
       image: imagesMap[slider.id] || null,
     }));
 
