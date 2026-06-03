@@ -1,5 +1,6 @@
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
+const { getHeroSearchFiltersMeta } = require("../utils/ads/config/heroSearchFilters");
 
 // =========================
 // Helpers
@@ -148,6 +149,69 @@ exports.getTables = async (req, res) => {
     }));
 
     return res.json(result);
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+exports.getHeroSearchFilters = async (req, res) => {
+  try {
+    const tableId = parseId(req.query.table_id);
+
+    let selectedDepartment = null;
+
+    if (tableId !== undefined) {
+      selectedDepartment = await prisma.AllTables.findUnique({
+        where: { id: tableId },
+        select: {
+          id: true,
+          name_ar: true,
+          name_en: true,
+          slug: true,
+          order: true,
+        },
+      });
+
+      if (!selectedDepartment) {
+        return res.status(400).json({ message: "Invalid table_id" });
+      }
+    }
+
+    const [departments, categories] = await Promise.all([
+      prisma.AllTables.findMany({
+        orderBy: ORDER_BY,
+        select: {
+          id: true,
+          name_ar: true,
+          name_en: true,
+          slug: true,
+          order: true,
+        },
+      }),
+      prisma.Categories.findMany({
+        where: tableId !== undefined ? { table_id: tableId } : {},
+        orderBy: ORDER_BY,
+        select: {
+          id: true,
+          table_id: true,
+          name_ar: true,
+          name_en: true,
+          order: true,
+        },
+      }),
+    ]);
+
+    const filters = getHeroSearchFiltersMeta(tableId);
+
+    return res.json({
+      ...filters,
+      selected_department: selectedDepartment,
+      departments,
+      prefetched_options: {
+        categories,
+      },
+      listing_route: "/ads",
+    });
   } catch (error) {
     return res.status(500).json({ message: error.message });
   }
@@ -431,11 +495,14 @@ exports.deleteItem = async (req, res) => {
 // =========================
 exports.getCategories = async (req, res) => {
   try {
+    const tableId = parseId(req.query.table_id);
+
     const categories = await prisma.Categories.findMany({
+      where: tableId !== undefined ? { table_id: tableId } : {},
       orderBy: ORDER_BY,
       include: {
         _count: {
-          select: { subCategories: true, ...ADS_COUNT_SELECT },
+          select: { subCategories: true, ...getAdsCountSelect(tableId) },
         },
       },
     });
@@ -443,7 +510,7 @@ exports.getCategories = async (req, res) => {
     const result = categories.map((cat) => ({
       ...cat,
       childsCount: cat._count.subCategories,
-      adsCount: getAdsCount(cat),
+      adsCount: getAdsCount(cat, tableId),
       _count: undefined,
     }));
 

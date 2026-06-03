@@ -146,6 +146,7 @@ function formatListAd(ad) {
     deposit_amount: ad.deposit_amount,
     currency: ad.currency,
     rent_frequency: ad.rent_frequency,
+    payment_method: ad.payment_method,
     status: ad.status,
     is_verified: ad.is_verified,
     created_at: ad.created_at,

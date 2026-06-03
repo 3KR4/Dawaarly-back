@@ -3,6 +3,7 @@ const router = express.Router();
 
 const {
   getTables,
+  getHeroSearchFilters,
   getCategories,
   getSubCategories,
   getCountries,
@@ -44,6 +45,7 @@ router.delete(
 
 
 router.get("/tables", getTables);
+router.get("/hero-search-filters", getHeroSearchFilters);
 
 router.get("/categories", getCategories);
 router.get("/subcategories", getSubCategories);
