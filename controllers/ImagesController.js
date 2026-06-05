@@ -29,6 +29,27 @@ const getRandomOverlayTransformation = () => {
   };
 };
 
+const getUploadTransformations = (entityType) => {
+  if (entityType === "AD") {
+    return [
+      // Keep ad images within a reasonable max size before storing them.
+      {
+        width: 1200,
+        height: 1200,
+        crop: "limit",
+      },
+      getRandomOverlayTransformation(),
+      {
+        fetch_format: "auto",
+        quality: "auto:eco",
+        flags: "progressive",
+      },
+    ];
+  }
+
+  return [{ fetch_format: "auto" }, { quality: "auto:good" }];
+};
+
 const normalizeOrderValues = (orders) => {
   if (orders === undefined || orders === null) return [];
 
@@ -55,11 +76,7 @@ const uploadSingleImage = (
     const uploadStream = cloudinary.uploader.upload_stream(
       {
         folder: `${entityType.toLowerCase()}/${entityId}`,
-        transformation: [
-          ...(entityType === "AD" ? [getRandomOverlayTransformation()] : []),
-          { fetch_format: "auto" },
-          { quality: "auto:good" },
-        ],
+        transformation: getUploadTransformations(entityType),
       },
       async (error, result) => {
         if (error) return reject(error);
