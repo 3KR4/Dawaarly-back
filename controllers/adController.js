@@ -8,16 +8,9 @@ const { getCache, setCache, deleteCachePattern } = require("../utils/redis");
 const { validateAdDates } = require("../utils/validation");
 const tableRegistry = require("../utils/ads/config/tableRegistry");
 const { toEgp } = require("../utils/currency");
-const {
-  sendPendingAdReviewEmail,
-  sendAdStatusDecisionEmail,
-} = require("../utils/sendEmail");
-
-const PENDING_AD_REVIEW_EMAIL =
-  process.env.PENDING_AD_REVIEW_EMAIL || "mouhamedmahmoud820@gmail.com";
 
 const adIncludeRelations = {
-  subuser: {
+  user: {
     select: {
       id: true,
       full_name: true,
@@ -25,20 +18,6 @@ const adIncludeRelations = {
       phone: true,
       tiktok_link: true,
       facebook_link: true,
-      created_at: true,
-      active_ads_count: true,
-    },
-  },
-
-  anonymous: {
-    select: {
-      id: true,
-      full_name: true,
-      email: true,
-      phone: true,
-      ip_address: true,
-      created_at: true,
-      approved_by_admin_id: true,
     },
   },
 
@@ -72,37 +51,6 @@ const adIncludeListRelations = {
   governorate: true,
   area: true,
   compound: true,
-  anonymous: {
-    select: {
-      id: true,
-      full_name: true,
-      email: true,
-      phone: true,
-      ip_address: true,
-    },
-  },
-
-  subuser: {
-    select: {
-      id: true,
-      full_name: true,
-      email: true,
-      phone: true,
-      user_type: true,
-      created_at: true,
-      active_ads_count: true,
-    },
-  },
-
-  admin: {
-    select: {
-      id: true,
-      full_name: true,
-      email: true,
-      phone: true,
-      user_type: true,
-    },
-  },
 
   table: {
     select: {
@@ -146,7 +94,6 @@ function formatListAd(ad) {
     deposit_amount: ad.deposit_amount,
     currency: ad.currency,
     rent_frequency: ad.rent_frequency,
-    payment_method: ad.payment_method,
     status: ad.status,
     is_verified: ad.is_verified,
     created_at: ad.created_at,
@@ -165,6 +112,8 @@ function formatListAd(ad) {
     subuser: ad.subuser || null,
     user: ad.user || null,
     anonymous: ad.anonymous || null,
+    admin_id: ad.admin_id || null,
+    subuser_id: ad.subuser_id || null,
     anonymous_id: ad.anonymous_id || null,
     user_id: ad.user_id || null,
     image: firstImage,
@@ -174,19 +123,6 @@ function formatListAd(ad) {
 function formatDetailAd(ad) {
   const amenities = {};
   const details = {};
-  const relationIdFields = [
-    "admin_id",
-    "user_id",
-    "subuser_id",
-    "anonymous_id",
-    "country_id",
-    "governorate_id",
-    "city_id",
-    "area_id",
-    "compound_id",
-    "categoryId",
-    "subCategoryId",
-  ];
 
   const cleaned = { ...ad };
 
@@ -200,10 +136,6 @@ function formatDetailAd(ad) {
       details[k] = cleaned[k];
       delete cleaned[k];
     }
-  });
-
-  relationIdFields.forEach((field) => {
-    delete cleaned[field];
   });
 
   return {
@@ -231,14 +163,23 @@ async function enrichAds(ads, userId = null, mode = "list") {
 
   let images = [];
   let favorites = [];
-  const regularUserIds = [
-    ...new Set(ads.map((ad) => ad.user_id).filter(Boolean)),
-  ];
-  let regularUsersById = {};
+  let usersById = {};
+  let anonymousById = {};
 
-  if (regularUserIds.length) {
-    const regularUsers = await prisma.Users.findMany({
-      where: { id: { in: regularUserIds } },
+  const ownerUserIds = [
+    ...new Set(
+      ads
+        .flatMap((ad) => [ad.admin_id, ad.subuser_id, ad.user_id])
+        .filter(Boolean),
+    ),
+  ];
+  const anonymousIds = [
+    ...new Set(ads.map((ad) => ad.anonymous_id).filter(Boolean)),
+  ];
+
+  if (ownerUserIds.length) {
+    const users = await prisma.Users.findMany({
+      where: { id: { in: ownerUserIds } },
       select: {
         id: true,
         full_name: true,
@@ -246,11 +187,30 @@ async function enrichAds(ads, userId = null, mode = "list") {
         phone: true,
         user_type: true,
         created_at: true,
+        active_ads_count: true,
       },
     });
 
-    regularUsersById = regularUsers.reduce((acc, user) => {
+    usersById = users.reduce((acc, user) => {
       acc[user.id] = user;
+      return acc;
+    }, {});
+  }
+
+  if (anonymousIds.length) {
+    const anonymousOwners = await prisma.Anonymous.findMany({
+      where: { id: { in: anonymousIds } },
+      select: {
+        id: true,
+        full_name: true,
+        email: true,
+        phone: true,
+        ip_address: true,
+      },
+    });
+
+    anonymousById = anonymousOwners.reduce((acc, anonymous) => {
+      acc[anonymous.id] = anonymous;
       return acc;
     }, {});
   }
@@ -263,7 +223,7 @@ async function enrichAds(ads, userId = null, mode = "list") {
 
     // =========================
     // DETAIL => ALL IMAGES
-    // LIST => COVER ONLY
+    // LIST => ALL IMAGES FOR COUNT + COVER PICK
     // =========================
     const tableImages = await prisma.images.findMany({
       where: {
@@ -273,9 +233,6 @@ async function enrichAds(ads, userId = null, mode = "list") {
           in: ids,
         },
 
-        ...(mode === "list" && {
-          is_cover: true,
-        }),
       },
 
       orderBy: {
@@ -339,14 +296,13 @@ async function enrichAds(ads, userId = null, mode = "list") {
 
     const formatted =
       mode === "detail"
-        ? formatDetailAd({
-            ...ad,
-            user: regularUsersById[ad.user_id] || ad.user || null,
-            images: adImages,
-          })
+        ? formatDetailAd({ ...ad, images: adImages })
         : formatListAd({
             ...ad,
-            user: regularUsersById[ad.user_id] || ad.user || null,
+            admin: usersById[ad.admin_id] || null,
+            subuser: usersById[ad.subuser_id] || null,
+            user: usersById[ad.user_id] || null,
+            anonymous: anonymousById[ad.anonymous_id] || null,
             image: adImages[0] || null,
           });
 
@@ -366,13 +322,35 @@ async function enrichAds(ads, userId = null, mode = "list") {
       }),
 
       ...(mode === "list" && {
-        image: adImages[0] || null,
+        image: adImages.find((image) => image.is_cover) || adImages[0] || null,
+        images_count: adImages.length,
       }),
 
       isFavorite: isFav,
     };
   });
 }
+const isDetailedListRequest = (query = {}) => {
+  const detailMode = String(query.details_mode || query.detail_mode || "")
+    .trim()
+    .toLowerCase();
+  const includeDetails = String(query.include_details || query.full_details || "")
+    .trim()
+    .toLowerCase();
+
+  return (
+    detailMode === "single" ||
+    detailMode === "detail" ||
+    includeDetails === "true" ||
+    includeDetails === "1"
+  );
+};
+
+const getListEnrichMode = (query = {}) =>
+  isDetailedListRequest(query) ? "detail" : "list";
+
+const getListIncludeRelations = (query = {}) =>
+  isDetailedListRequest(query) ? adIncludeRelations : adIncludeListRelations;
 const validateCreateAd = require("../utils/ads/validators/validateCreateAd");
 const getModel = require("../utils/ads/services/getModel");
 const validateUpdateAd = require("../utils/ads/validators/validateUpdateAd");
@@ -380,17 +358,18 @@ const validateUpdateAd = require("../utils/ads/validators/validateUpdateAd");
 const getAdsOrderBy = (query) => {
   const sort = query.sort || query.sort_by;
   const order = query.order === "asc" ? "asc" : "desc";
+  const hasExplicitSort = Boolean(sort);
 
-  const orderBy = [{ featured_priority: "desc" }];
+  const orderBy = hasExplicitSort ? [] : [{ featured_priority: "desc" }];
 
   if (sort === "top_views" || sort === "views" || sort === "views_desc") {
     orderBy.push({ views_count: "desc" }, { created_at: "desc" });
   } else if (sort === "favorites" || sort === "favorites_desc") {
     orderBy.push({ favorites_count: "desc" }, { created_at: "desc" });
-  } else if (sort === "title_asc" || sort === "title") {
-    orderBy.push({ title: "asc" }, { created_at: "desc" });
-  } else if (sort === "title_desc") {
-    orderBy.push({ title: "desc" }, { created_at: "desc" });
+  } else if (sort === "price_asc" || (sort === "price" && order === "asc")) {
+    orderBy.push({ price: "asc" }, { created_at: "desc" });
+  } else if (sort === "price_desc" || sort === "price") {
+    orderBy.push({ price: "desc" }, { created_at: "desc" });
   } else if (sort === "date_asc" || (sort === "date" && order === "asc")) {
     orderBy.push({ created_at: "asc" });
   } else {
@@ -405,8 +384,11 @@ const compareAds = (query) => {
   const order = query.order === "asc" ? "asc" : "desc";
 
   return (a, b) => {
-    const priorityDiff = Number(b.featured_priority || 0) - Number(a.featured_priority || 0);
-    if (priorityDiff !== 0) return priorityDiff;
+    if (!sort) {
+      const priorityDiff =
+        Number(b.featured_priority || 0) - Number(a.featured_priority || 0);
+      if (priorityDiff !== 0) return priorityDiff;
+    }
 
     if (sort === "top_views" || sort === "views" || sort === "views_desc") {
       const viewsDiff = Number(b.views_count || 0) - Number(a.views_count || 0);
@@ -419,24 +401,14 @@ const compareAds = (query) => {
       if (favoritesDiff !== 0) return favoritesDiff;
     }
 
-    if (sort === "price_asc" || sort === "price") {
-      const priceDiff = toEgp(a.price, a.currency) - toEgp(b.price, b.currency);
+    if (sort === "price_asc" || sort === "price_desc" || sort === "price") {
+      const leftPrice = toEgp(a.price, a.currency);
+      const rightPrice = toEgp(b.price, b.currency);
+      const priceDiff =
+        sort === "price_asc" || (sort === "price" && order === "asc")
+          ? leftPrice - rightPrice
+          : rightPrice - leftPrice;
       if (priceDiff !== 0) return priceDiff;
-    }
-
-    if (sort === "price_desc") {
-      const priceDiff = toEgp(b.price, b.currency) - toEgp(a.price, a.currency);
-      if (priceDiff !== 0) return priceDiff;
-    }
-
-    if (sort === "title_asc" || sort === "title") {
-      const titleDiff = String(a.title || "").localeCompare(String(b.title || ""));
-      if (titleDiff !== 0) return titleDiff;
-    }
-
-    if (sort === "title_desc") {
-      const titleDiff = String(b.title || "").localeCompare(String(a.title || ""));
-      if (titleDiff !== 0) return titleDiff;
     }
 
     const aDate = new Date(a.created_at).getTime();
@@ -449,39 +421,6 @@ const compareAds = (query) => {
     return bDate - aDate;
   };
 };
-
-const isPriceSort = (query) => {
-  const sort = query.sort || query.sort_by;
-  return sort === "price_asc" || sort === "price_desc" || sort === "price";
-};
-
-const isFilled = (value) => value !== undefined && value !== null && value !== "";
-
-const isWithinNormalizedPriceRange = (ad, query) => {
-  const min = isFilled(query.min_price) ? Number(query.min_price) : null;
-  const max = isFilled(query.max_price) ? Number(query.max_price) : null;
-  const normalizedPrice = toEgp(ad.price, ad.currency);
-
-  if (min !== null && normalizedPrice < min) return false;
-  if (max !== null && normalizedPrice > max) return false;
-  return true;
-};
-
-const getMaxNormalizedPrice = (ads) =>
-  Math.ceil(
-    ads.reduce((max, ad) => Math.max(max, toEgp(ad.price, ad.currency)), 0),
-  );
-
-const getMaxAreaM2 = (ads) =>
-  Math.ceil(
-    ads.reduce((max, ad) => Math.max(max, Number(ad.area_m2) || 0), 0),
-  );
-
-const buildAdsMeta = ({ priceAds, areaAds }) => ({
-  max_price: getMaxNormalizedPrice(priceAds),
-  max_area_m2: getMaxAreaM2(areaAds),
-  price_currency: "EGP",
-});
 
 const getSectionOrderBy = (type, query) => {
   if (type === "views" || type === "top_views") {
@@ -561,21 +500,6 @@ const getAvailableAdTables = () =>
     .map((table_id) => ({ table_id, prismaModel: getModel(table_id) }))
     .filter((entry) => entry.prismaModel);
 
-const getActiveAdsCount = async (subuserId) => {
-  const counts = await Promise.all(
-    getAvailableAdTables().map(({ prismaModel }) =>
-      prismaModel.count({
-        where: {
-          status: "ACTIVE",
-          subuser_id: subuserId,
-        },
-      }),
-    ),
-  );
-
-  return counts.reduce((total, count) => total + count, 0);
-};
-
 const sectionFieldByType = {
   gov: "governorate_id",
   governorate: "governorate_id",
@@ -610,221 +534,9 @@ const specificTableSectionTypes = new Set([
 const normalizeBoolean = (value) =>
   value === true || value === "true" || value === 1 || value === "1";
 
-const normalizePermissions = (permissions) => {
-  if (!permissions) return [];
-  if (Array.isArray(permissions)) return permissions.filter(Boolean);
-
-  if (typeof permissions === "string") {
-    const trimmed = permissions.trim();
-    if (!trimmed) return [];
-
-    try {
-      const parsed = JSON.parse(trimmed);
-      return Array.isArray(parsed) ? parsed.filter(Boolean) : [];
-    } catch {
-      return trimmed
-        .split(",")
-        .map((permission) => permission.trim())
-        .filter(Boolean);
-    }
-  }
-
-  return [];
-};
-
-const normalizeTagsForStorage = (tags) => {
-  if (tags === undefined) return undefined;
-  if (tags === null) return null;
-
-  if (Array.isArray(tags)) {
-    const values = tags.map((tag) => String(tag).trim()).filter(Boolean);
-    return values.length ? JSON.stringify(values) : null;
-  }
-
-  if (typeof tags === "string") {
-    const trimmedTags = tags.trim();
-    if (!trimmedTags) return null;
-
-    try {
-      JSON.parse(trimmedTags);
-      return trimmedTags;
-    } catch {
-      const values = trimmedTags
-        .split(",")
-        .map((tag) => tag.trim())
-        .filter(Boolean);
-
-      return values.length ? JSON.stringify(values) : null;
-    }
-  }
-
-  return JSON.stringify(tags);
-};
-
-const getRequestIp = (req) =>
-  req.headers["x-forwarded-for"]?.split(",")[0]?.trim() ||
-  req.ip ||
-  req.socket?.remoteAddress ||
-  null;
-
-const normalizeAnonymousContact = (anonymous = {}) => ({
-  full_name: String(anonymous.full_name || anonymous.name || "").trim(),
-  email: anonymous.email ? String(anonymous.email).trim() : null,
-  phone: anonymous.phone ? String(anonymous.phone).trim() : null,
-});
-
-const normalizeComparableText = (value) =>
-  String(value || "")
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, " ");
-
-const normalizeComparablePhone = (value) =>
-  String(value || "").replace(/[^\d+]/g, "");
-
-const getEditDistance = (left, right) => {
-  if (left === right) return 0;
-  if (!left) return right.length;
-  if (!right) return left.length;
-
-  const previous = Array.from({ length: right.length + 1 }, (_, i) => i);
-
-  for (let i = 1; i <= left.length; i += 1) {
-    let diagonal = previous[0];
-    previous[0] = i;
-
-    for (let j = 1; j <= right.length; j += 1) {
-      const temp = previous[j];
-      previous[j] = Math.min(
-        previous[j] + 1,
-        previous[j - 1] + 1,
-        diagonal + (left[i - 1] === right[j - 1] ? 0 : 1),
-      );
-      diagonal = temp;
-    }
-  }
-
-  return previous[right.length];
-};
-
-const getSimilarity = (left, right) => {
-  if (!left || !right) return 0;
-  const maxLength = Math.max(left.length, right.length);
-  if (!maxLength) return 1;
-
-  return 1 - getEditDistance(left, right) / maxLength;
-};
-
-const areSimilarTexts = (left, right, threshold = 0.86) =>
-  left === right || getSimilarity(left, right) >= threshold;
-
-const areSimilarPhones = (left, right) => {
-  if (!left || !right) return false;
-  if (left === right) return true;
-
-  const leftTail = left.slice(-8);
-  const rightTail = right.slice(-8);
-
-  return leftTail.length >= 8 && leftTail === rightTail;
-};
-
-const isSameAnonymousContact = (candidate, contact) => {
-  const candidateName = normalizeComparableText(candidate.full_name);
-  const contactName = normalizeComparableText(contact.full_name);
-  const candidateEmail = normalizeComparableText(candidate.email);
-  const contactEmail = normalizeComparableText(contact.email);
-  const candidatePhone = normalizeComparablePhone(candidate.phone);
-  const contactPhone = normalizeComparablePhone(contact.phone);
-
-  if (contactEmail && areSimilarTexts(candidateEmail, contactEmail, 0.92)) {
-    return true;
-  }
-
-  if (contactPhone && areSimilarPhones(candidatePhone, contactPhone)) {
-    return true;
-  }
-
-  if (!candidateName || !contactName) return false;
-
-  return areSimilarTexts(candidateName, contactName);
-};
-
-const createAnonymousOwner = async (anonymous, req) => {
-  const contact = normalizeAnonymousContact(anonymous);
-  const ipAddress = getRequestIp(req);
-
-  if (!contact.full_name) {
-    const error = new Error("Anonymous full_name is required");
-    error.statusCode = 400;
-    throw error;
-  }
-
-  if (!contact.email && !contact.phone) {
-    const error = new Error("Anonymous email or phone is required");
-    error.statusCode = 400;
-    throw error;
-  }
-
-  if (ipAddress) {
-    const candidates = await prisma.Anonymous.findMany({
-      where: { ip_address: ipAddress },
-      orderBy: { updated_at: "desc" },
-      take: 25,
-    });
-    const existingAnonymous = candidates.find((candidate) =>
-      isSameAnonymousContact(candidate, contact),
-    );
-
-    if (existingAnonymous) {
-      return prisma.Anonymous.update({
-        where: { id: existingAnonymous.id },
-        data: {
-          full_name: contact.full_name || existingAnonymous.full_name,
-          email: contact.email || existingAnonymous.email,
-          phone: contact.phone || existingAnonymous.phone,
-        },
-      });
-    }
-  }
-
-  return prisma.Anonymous.create({
-    data: {
-      ...contact,
-      ip_address: ipAddress,
-    },
-  });
-};
-
-const getAdOwnerContact = async (ad) => {
-  if (ad.subuser_id) {
-    return prisma.Users.findUnique({
-      where: { id: ad.subuser_id },
-      select: { email: true, full_name: true },
-    });
-  }
-
-  if (ad.user_id) {
-    return prisma.Users.findUnique({
-      where: { id: ad.user_id },
-      select: { email: true, full_name: true },
-    });
-  }
-
-  if (ad.anonymous_id) {
-    return prisma.Anonymous.findUnique({
-      where: { id: ad.anonymous_id },
-      select: { email: true, full_name: true },
-    });
-  }
-
-  return null;
-};
-
 exports.createAd = async (req, res) => {
   try {
-    const data = { ...req.body };
-    const anonymousPayload = data.anonymous;
-    delete data.anonymous;
+    const data = req.body;
 
     // =========================
     // TABLE ID
@@ -851,77 +563,18 @@ exports.createAd = async (req, res) => {
       });
     }
 
-    const authUser = req.user;
-    const user = authUser
-      ? await prisma.Users.findUnique({
-          where: { id: authUser.id },
-        })
-      : null;
-
-    if (authUser && !user) {
-      return res.status(401).json({
-        message: "Authenticated user not found",
-      });
-    }
-
-    if (user) {
-      user.permissions = normalizePermissions(user.permissions);
-    }
+    // =========================
+    // USER DATA
+    // =========================
+    const user = req.user;
 
     // =========================
-    // OWNER LOGIC
+    // STATUS LOGIC
     // =========================
-    let subuser_id = null;
-    let user_id = null;
-    let anonymous_id = null;
-    let admin_id = null;
-    let status = "PENDING";
-    let is_verified = false;
-    let status_changed_at = null;
+    const isAdmin =
+      user?.is_super_admin || user?.permissions?.includes("CREATE_AD");
 
-    if (!user) {
-      const anonymous = await createAnonymousOwner(anonymousPayload, req);
-      anonymous_id = anonymous.id;
-      data.display_dawaarly_contact = true;
-      data.display_phone = false;
-      data.display_whatsapp = false;
-    } else if (user.is_super_admin) {
-      admin_id = user.id;
-      status = "ACTIVE";
-      is_verified = true;
-      status_changed_at = new Date();
-    } else if (user.user_type === "ADMIN") {
-      if (!user.permissions?.includes("CREATE_AD")) {
-        return res.status(403).json({
-          message: "Access denied: You need CREATE_AD permission",
-        });
-      }
-
-      admin_id = user.id;
-      status = "ACTIVE";
-      is_verified = true;
-      status_changed_at = new Date();
-    } else if (user.user_type === "SUBUSER") {
-      const activeAdsCount = await getActiveAdsCount(user.id);
-      const activeAdsLimit = Number(user.subscription_ads_limit || 0);
-
-      if (activeAdsCount >= activeAdsLimit) {
-        return res.status(403).json({
-          message: "Active ads limit reached",
-        });
-      }
-
-      subuser_id = user.id;
-    } else if (user.user_type === "USER") {
-      user_id = user.id;
-      data.display_dawaarly_contact = true;
-      data.display_phone = false;
-      data.display_whatsapp = false;
-    } else {
-      return res.status(403).json({
-        message: "This user type cannot create ads",
-      });
-    }
+    const status = isAdmin ? "ACTIVE" : "PENDING";
 
     // =========================
     // BUILD CREATE DATA
@@ -930,17 +583,13 @@ exports.createAd = async (req, res) => {
       ...data,
 
       table_id,
-      subuser_id,
-      user_id,
-      anonymous_id,
-      admin_id,
+      user_id: isAdmin ? null : user.id,
+      admin_id: isAdmin ? user.id : null,
       status,
-      is_verified,
+      is_verified: isAdmin,
 
-      status_changed_at,
+      status_changed_at: isAdmin ? new Date() : null,
     };
-
-    createData.tags = normalizeTagsForStorage(createData.tags);
 
     // =========================
     // DATE CASTING
@@ -960,17 +609,6 @@ exports.createAd = async (req, res) => {
       data: createData,
     });
 
-    if (ad.status === "PENDING") {
-      sendPendingAdReviewEmail({
-        to: PENDING_AD_REVIEW_EMAIL,
-        adTitle: ad.title,
-        adId: ad.id,
-        tableId: table_id,
-      }).catch((error) => {
-        console.error("Failed to send pending ad review email:", error.message);
-      });
-    }
-
     // =========================
     // RESPONSE
     // =========================
@@ -986,7 +624,7 @@ exports.createAd = async (req, res) => {
   } catch (err) {
     console.log(err);
 
-    return res.status(err.statusCode || 500).json({
+    return res.status(500).json({
       success: false,
       message: err.message,
     });
@@ -1025,12 +663,9 @@ exports.updateAd = async (req, res) => {
     const user = req.user;
 
     const isAdmin =
-      user?.permissions?.includes("UPDATE_AD") || user?.is_super_admin;
+      user?.permissions?.includes("EDIT_AD") || user?.is_super_admin;
 
-    const isOwner =
-      ad.subuser_id === user.id ||
-      ad.user_id === user.id ||
-      ad.admin_id === user.id;
+    const isOwner = ad.user_id === user.id;
 
     if (!isAdmin && !isOwner) {
       return res.status(403).json({
@@ -1054,10 +689,6 @@ exports.updateAd = async (req, res) => {
       ...req.body,
     };
 
-    if (Object.prototype.hasOwnProperty.call(dataToUpdate, "tags")) {
-      dataToUpdate.tags = normalizeTagsForStorage(dataToUpdate.tags);
-    }
-
     // date casting
     if (req.body.available_from) {
       dataToUpdate.available_from = new Date(req.body.available_from);
@@ -1072,18 +703,14 @@ exports.updateAd = async (req, res) => {
     }
 
     // pending after edit
-    if (!isAdmin) {
+    if (!isAdmin && ad.status === "ACTIVE") {
       dataToUpdate.status = "PENDING";
       dataToUpdate.was_previously_approved = true;
     }
 
     // prevent changing protected fields
     delete dataToUpdate.id;
-    delete dataToUpdate.table_id;
-    delete dataToUpdate.subuser_id;
     delete dataToUpdate.user_id;
-    delete dataToUpdate.admin_id;
-    delete dataToUpdate.anonymous_id;
 
     if (!isAdmin) {
       delete dataToUpdate.is_verified;
@@ -1152,10 +779,7 @@ exports.deleteAd = async (req, res) => {
     // =========================
     const user = req.user;
 
-    const isOwner =
-      ad.subuser_id === user.id ||
-      ad.user_id === user.id ||
-      ad.admin_id === user.id;
+    const isOwner = ad.user_id === user.id;
 
     const canDelete =
       user?.is_super_admin || user?.permissions?.includes("DELETE_AD");
@@ -1244,10 +868,7 @@ exports.changeAdStatus = async (req, res) => {
       req.user?.is_super_admin ||
       req.user?.permissions?.includes("CHANGE_ADS_STATUS");
 
-    const isOwner =
-      ad.subuser_id === req.user.id ||
-      ad.user_id === req.user.id ||
-      ad.admin_id === req.user.id;
+    const isOwner = ad.user_id === req.user.id;
 
     // =========================
     // VALID STATUS
@@ -1297,46 +918,17 @@ exports.changeAdStatus = async (req, res) => {
     // =========================
     // UPDATE
     // =========================
-    const statusChangedAt = new Date();
     const updatedAd = await prismaModel.update({
       where: { id: adId },
       data: {
         status,
-        status_changed_at: statusChangedAt,
-        ...(status === "ACTIVE" &&
-          isAdmin &&
-          !ad.admin_id && {
-            admin_id: req.user.id,
-          }),
+        status_changed_at: new Date(),
 
         ...(reject_reason && {
           reject_reason,
         }),
       },
     });
-
-    if (status === "ACTIVE" && ad.anonymous_id && isAdmin) {
-      await prisma.Anonymous.update({
-        where: { id: ad.anonymous_id },
-        data: { approved_by_admin_id: req.user.id },
-      });
-    }
-
-    if (isAdmin && ["ACTIVE", "REJECTED"].includes(status)) {
-      const ownerContact = await getAdOwnerContact(ad);
-
-      if (ownerContact?.email) {
-        sendAdStatusDecisionEmail({
-          to: ownerContact.email,
-          adTitle: ad.title,
-          status,
-          reason: reject_reason,
-          changedAt: statusChangedAt,
-        }).catch((error) => {
-          console.error("Failed to send ad status decision email:", error.message);
-        });
-      }
-    }
 
     await deleteCachePattern("ads:list:*");
     await deleteCachePattern("userAds:*");
@@ -1427,10 +1019,6 @@ exports.assignAdmin = async (req, res) => {
       },
     });
 
-    await deleteCachePattern("ads:list:*");
-    await deleteCachePattern("userAds:*");
-    await deleteCachePattern("sections:*");
-
     return res.json({
       success: true,
       message:
@@ -1466,14 +1054,10 @@ exports.getAllAds = async (req, res) => {
 
     const where = buildAdsWhere(req.query, canViewAllStatuses, {
       includeDynamic: Boolean(table_id),
-      skipPriceRange: true,
-    });
-    const areaMetaWhere = buildAdsWhere(req.query, canViewAllStatuses, {
-      includeDynamic: Boolean(table_id),
-      skipPriceRange: true,
-      skipAreaRange: true,
     });
     const orderBy = getAdsOrderBy(req.query);
+    const enrichMode = getListEnrichMode(req.query);
+    const listIncludeRelations = getListIncludeRelations(req.query);
 
     const crypto = require("crypto");
 
@@ -1482,7 +1066,7 @@ exports.getAllAds = async (req, res) => {
       .update(JSON.stringify({ query: req.query, where, orderBy }))
       .digest("hex");
 
-    const cacheKey = `ads:list:${userId || "guest"}:${page}:${limit}:${hash}`;
+    const cacheKey = `ads:list:v4:${userId || "guest"}:${page}:${limit}:${hash}`;
 
     const cached = await getCache(cacheKey);
     if (cached) return res.json(cached);
@@ -1497,36 +1081,22 @@ exports.getAllAds = async (req, res) => {
         });
       }
 
-      const [records, areaMetaRecords] = await Promise.all([
+      const [ads, total] = await Promise.all([
         prismaModel.findMany({
           where,
+          skip,
+          take: limit,
           orderBy,
-          include: adIncludeListRelations,
+          include: listIncludeRelations,
         }),
-        prismaModel.findMany({
-          where: areaMetaWhere,
-          orderBy,
-          include: adIncludeListRelations,
-        }),
+        prismaModel.count({ where }),
       ]);
 
-      const matchingAds = records.filter((ad) =>
-        isWithinNormalizedPriceRange(ad, req.query),
-      );
-      const areaMetaAds = areaMetaRecords.filter((ad) =>
-        isWithinNormalizedPriceRange(ad, req.query),
-      );
-      const total = matchingAds.length;
-      const ads = matchingAds.sort(compareAds(req.query)).slice(skip, skip + limit);
-      const data = await enrichAds(ads, userId, "list");
+      const data = await enrichAds(ads, userId, enrichMode);
 
       const response = {
         success: true,
         data,
-        meta: buildAdsMeta({
-          priceAds: records,
-          areaAds: areaMetaAds,
-        }),
         pagination: {
           total,
           page,
@@ -1541,49 +1111,35 @@ exports.getAllAds = async (req, res) => {
     }
 
     const tables = getAvailableAdTables();
+    const takePerTable = skip + limit;
+
     const tableResults = await Promise.all(
       tables.map(async ({ prismaModel }) => {
-        const [records, areaMetaRecords, count] = await Promise.all([
+        const [records, count] = await Promise.all([
           prismaModel.findMany({
             where,
+            take: takePerTable,
             orderBy,
-            include: adIncludeListRelations,
-          }),
-          prismaModel.findMany({
-            where: areaMetaWhere,
-            orderBy,
-            include: adIncludeListRelations,
+            include: listIncludeRelations,
           }),
           prismaModel.count({ where }),
         ]);
 
-        return { records, areaMetaRecords, count };
+        return { records, count };
       }),
     );
 
-    const allRecords = tableResults.flatMap((result) => result.records);
-    const allAreaMetaRecords = tableResults.flatMap(
-      (result) => result.areaMetaRecords,
-    );
-    const matchingAds = allRecords
-      .filter((ad) => isWithinNormalizedPriceRange(ad, req.query));
-    const areaMetaAds = allAreaMetaRecords.filter((ad) =>
-      isWithinNormalizedPriceRange(ad, req.query),
-    );
-    const total = matchingAds.length;
-    const ads = matchingAds
+    const total = tableResults.reduce((sum, result) => sum + result.count, 0);
+    const ads = tableResults
+      .flatMap((result) => result.records)
       .sort(compareAds(req.query))
       .slice(skip, skip + limit);
 
-    const data = await enrichAds(ads, userId, "list");
+    const data = await enrichAds(ads, userId, enrichMode);
 
     const response = {
       success: true,
       data,
-      meta: buildAdsMeta({
-        priceAds: allRecords,
-        areaAds: areaMetaAds,
-      }),
       pagination: {
         total,
         page,
@@ -1625,20 +1181,6 @@ exports.getAd = async (req, res) => {
     }
 
     const userId = req.user?.id || null;
-    const isAdmin = req.user?.is_super_admin || req.user?.user_type === "ADMIN";
-    const isDashboardRequest = req.query.scope === "dashboard";
-    const isOwner =
-      userId &&
-      [ad.user_id, ad.subuser_id, ad.admin_id].filter(Boolean).includes(userId);
-    const canViewInactiveAd = isOwner || (isAdmin && isDashboardRequest);
-
-    if (ad.status !== "ACTIVE" && !canViewInactiveAd) {
-      return res.status(404).json({
-        success: false,
-        message: "Ad not found",
-      });
-    }
-
     const stats = await trackAdView({
       prismaModel,
       entityId: adId,
@@ -1663,8 +1205,7 @@ exports.getUserAds = async (req, res) => {
     const { page, limit, skip } = pagination(req.query);
     const viewerId = req.user?.id || null;
     const isAdmin = req.user?.is_super_admin || req.user?.user_type === "ADMIN";
-    const isDashboardRequest = req.query.scope === "dashboard";
-    const canViewAllStatuses = viewerId === userId || (isAdmin && isDashboardRequest);
+    const canViewAllStatuses = isAdmin || viewerId === userId;
     const table_id = req.query.table_id ? Number(req.query.table_id) : null;
 
     if (!userId) {

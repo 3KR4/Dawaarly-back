@@ -226,8 +226,9 @@ async function getUserAdsCounts(user) {
   const tables = getAvailableAdTables();
 
   const tableCounts = await Promise.all(
-    tables.map(({ prismaModel }) =>
-      Promise.all([
+    tables.map(async ({ prismaModel }) => {
+      try {
+        return await Promise.all([
         prismaModel.count({
           where: { [ownerField]: user.id },
         }),
@@ -243,8 +244,11 @@ async function getUserAdsCounts(user) {
         prismaModel.count({
           where: { [ownerField]: user.id, status: "DISABLED" },
         }),
-      ]),
-    ),
+        ]);
+      } catch (error) {
+        return [0, 0, 0, 0, 0];
+      }
+    }),
   );
 
   tableCounts.forEach(([total, pending, active, rejected, disabled]) => {
@@ -282,17 +286,23 @@ async function getUserAdsCountsMap(users = []) {
   await Promise.all(
     tables.flatMap(({ prismaModel }) =>
       Object.entries(groupedUsers).map(async ([ownerField, userIds]) => {
-        const ads = await prismaModel.findMany({
-          where: {
-            [ownerField]: {
-              in: userIds,
+        let ads = [];
+
+        try {
+          ads = await prismaModel.findMany({
+            where: {
+              [ownerField]: {
+                in: userIds,
+              },
             },
-          },
-          select: {
-            [ownerField]: true,
-            status: true,
-          },
-        });
+            select: {
+              [ownerField]: true,
+              status: true,
+            },
+          });
+        } catch (error) {
+          return;
+        }
 
         ads.forEach((ad) => {
           const ownerId = ad[ownerField];
