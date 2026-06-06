@@ -44,12 +44,12 @@ const getUserPermissions = (user) => {
   return normalizePermissions(user?.permissions);
 };
 
-const serializePermissions = (permissions) =>
-  normalizePermissions(permissions);
+const serializePermissions = (permissions) => normalizePermissions(permissions);
 
 const normalizeInterests = (interests) => {
   if (!interests) return [];
-  if (Array.isArray(interests)) return interests.filter((item) => item !== null && item !== undefined);
+  if (Array.isArray(interests))
+    return interests.filter((item) => item !== null && item !== undefined);
 
   if (typeof interests === "string") {
     const trimmed = interests.trim();
@@ -210,9 +210,11 @@ const getUserAdsOwnerField = (user) => {
 };
 
 const createEmptyAdsCounts = () => ({
-  approved_ads_count: 0,
+  total_ads_count: 0,
   pending_ads_count: 0,
   active_ads_count: 0,
+  rejected_ads_count: 0,
+  disable_ads_count: 0,
 });
 
 async function getUserAdsCounts(user) {
@@ -224,10 +226,11 @@ async function getUserAdsCounts(user) {
   const tables = getAvailableAdTables();
 
   const tableCounts = await Promise.all(
-    tables.map(({ prismaModel }) =>
-      Promise.all([
+    tables.map(async ({ prismaModel }) => {
+      try {
+        return await Promise.all([
         prismaModel.count({
-          where: { [ownerField]: user.id, status: { not: "PENDING" } },
+          where: { [ownerField]: user.id },
         }),
         prismaModel.count({
           where: { [ownerField]: user.id, status: "PENDING" },
@@ -235,14 +238,25 @@ async function getUserAdsCounts(user) {
         prismaModel.count({
           where: { [ownerField]: user.id, status: "ACTIVE" },
         }),
-      ]),
-    ),
+        prismaModel.count({
+          where: { [ownerField]: user.id, status: "REJECTED" },
+        }),
+        prismaModel.count({
+          where: { [ownerField]: user.id, status: "DISABLED" },
+        }),
+        ]);
+      } catch (error) {
+        return [0, 0, 0, 0, 0];
+      }
+    }),
   );
 
-  tableCounts.forEach(([approved, pending, active]) => {
-    counts.approved_ads_count += approved;
+  tableCounts.forEach(([total, pending, active, rejected, disabled]) => {
+    counts.total_ads_count += total;
     counts.pending_ads_count += pending;
     counts.active_ads_count += active;
+    counts.rejected_ads_count += rejected;
+    counts.disable_ads_count += disabled;
   });
 
   return counts;
@@ -272,28 +286,45 @@ async function getUserAdsCountsMap(users = []) {
   await Promise.all(
     tables.flatMap(({ prismaModel }) =>
       Object.entries(groupedUsers).map(async ([ownerField, userIds]) => {
-        const ads = await prismaModel.findMany({
-          where: {
-            [ownerField]: {
-              in: userIds,
+        let ads = [];
+
+        try {
+          ads = await prismaModel.findMany({
+            where: {
+              [ownerField]: {
+                in: userIds,
+              },
             },
-          },
-          select: {
-            [ownerField]: true,
-            status: true,
-          },
-        });
+            select: {
+              [ownerField]: true,
+              status: true,
+            },
+          });
+        } catch (error) {
+          return;
+        }
 
         ads.forEach((ad) => {
           const ownerId = ad[ownerField];
           if (!ownerId || !countsMap[ownerId]) return;
+
+          countsMap[ownerId].total_ads_count += 1;
 
           if (ad.status === "PENDING") {
             countsMap[ownerId].pending_ads_count += 1;
             return;
           }
 
-          countsMap[ownerId].approved_ads_count += 1;
+          if (ad.status === "REJECTED") {
+            countsMap[ownerId].rejected_ads_count += 1;
+            return;
+          }
+
+          if (ad.status === "DISABLED") {
+            countsMap[ownerId].disable_ads_count += 1;
+            return;
+          }
+
           if (ad.status === "ACTIVE") {
             countsMap[ownerId].active_ads_count += 1;
           }
@@ -456,7 +487,8 @@ exports.login = [
           console.error("Verification email failed:", emailError.message);
 
           return res.status(502).json({
-            message: "Email not verified, but verification email could not be sent",
+            message:
+              "Email not verified, but verification email could not be sent",
             error: emailError.message,
           });
         }
@@ -515,8 +547,6 @@ exports.refreshToken = async (req, res) => {
 
     // ================= VERIFY TOKEN =================
     const decoded = jwt.verify(token, process.env.JWT_REFRESH_SECRET);
-
-    
 
     // ================= FIND TOKEN =================
     const validToken = await prisma.RefreshToken.findUnique({
@@ -896,7 +926,7 @@ exports.updateUserBasicInfo = async (req, res) => {
 
     const cleanData = (obj) =>
       Object.fromEntries(
-        Object.entries(obj).filter(([_, v]) => v !== undefined)
+        Object.entries(obj).filter(([_, v]) => v !== undefined),
       );
 
     const data = cleanData({
@@ -1396,8 +1426,6 @@ exports.getMe = async (req, res) => {
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
-
-
 
     const [serializedUser, favoritesCount, activeAdsCount] = await Promise.all([
       serializeUser(user, user),
