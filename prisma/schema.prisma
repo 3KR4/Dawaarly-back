@@ -58,12 +58,22 @@ model Users {
   owned_commercial_sale_ads        D_Commercial_Sale[]          @relation("CommercialSaleOwner")
   managed_vacation_rent_ads        D_Vacation_Rent[]            @relation("VacationRentAdmin")
   owned_vacation_rent_ads          D_Vacation_Rent[]            @relation("VacationRentOwner")
+  user_vacation_rent_ads           D_Vacation_Rent[]            @relation("VacationRentUser")
   managed_vacation_sale_ads        D_Vacation_Sale[]            @relation("VacationSaleAdmin")
   owned_vacation_sale_ads          D_Vacation_Sale[]            @relation("VacationSaleOwner")
+  user_vacation_sale_ads           D_Vacation_Sale[]            @relation("VacationSaleUser")
   managed_villa_rent_ads           D_Villa_Rent[]               @relation("VillaRentAdmin")
   owned_villa_rent_ads             D_Villa_Rent[]               @relation("VillaRentOwner")
+  user_villa_rent_ads              D_Villa_Rent[]               @relation("VillaRentUser")
   managed_villa_sale_ads           D_Villa_Sale[]               @relation("VillaSaleAdmin")
   owned_villa_sale_ads             D_Villa_Sale[]               @relation("VillaSaleOwner")
+  user_villa_sale_ads              D_Villa_Sale[]               @relation("VillaSaleUser")
+  user_apartment_rent_ads          D_Apartment_Rent[]           @relation("ApartmentRentUser")
+  user_apartment_sale_ads          D_Apartment_Sale[]           @relation("ApartmentSaleUser")
+  user_buildings_lands_rent_ads    D_Buildings_And_Lands_Rent[] @relation("BuildingsLandsRentUser")
+  user_buildings_lands_sale_ads    D_Buildings_And_Lands_Sale[] @relation("BuildingsLandsSaleUser")
+  user_commercial_rent_ads         D_Commercial_Rent[]          @relation("CommercialRentUser")
+  user_commercial_sale_ads         D_Commercial_Sale[]          @relation("CommercialSaleUser")
   refreshTokens                    RefreshToken[]
   city                             Cities?                      @relation(fields: [city_id], references: [id])
   country                          Countries?                   @relation(fields: [country_id], references: [id])
@@ -519,6 +529,7 @@ model D_Vacation_Sale {
   subCategory              SubCategories? @relation(fields: [subCategoryId], references: [id])
   subuser                  Users?         @relation("VacationSaleOwner", fields: [subuser_id], references: [id])
   table                    AllTables      @relation(fields: [table_id], references: [id])
+  user                     Users?         @relation("VacationSaleUser", fields: [user_id], references: [id])
 
   @@index([status])
   @@index([table_id])
@@ -628,6 +639,7 @@ model D_Vacation_Rent {
   subCategory              SubCategories?              @relation(fields: [subCategoryId], references: [id])
   subuser                  Users?                      @relation("VacationRentOwner", fields: [subuser_id], references: [id])
   table                    AllTables                   @relation(fields: [table_id], references: [id])
+  user                     Users?                      @relation("VacationRentUser", fields: [user_id], references: [id])
 
   @@index([status])
   @@index([table_id])
@@ -725,6 +737,7 @@ model D_Apartment_Sale {
   subCategory              SubCategories? @relation(fields: [subCategoryId], references: [id])
   subuser                  Users?         @relation("ApartmentSaleOwner", fields: [subuser_id], references: [id])
   table                    AllTables      @relation(fields: [table_id], references: [id])
+  user                     Users?         @relation("ApartmentSaleUser", fields: [user_id], references: [id])
 
   @@index([status])
   @@index([table_id])
@@ -826,6 +839,7 @@ model D_Apartment_Rent {
   subCategory              SubCategories?              @relation(fields: [subCategoryId], references: [id])
   subuser                  Users?                      @relation("ApartmentRentOwner", fields: [subuser_id], references: [id])
   table                    AllTables                   @relation(fields: [table_id], references: [id])
+  user                     Users?                      @relation("ApartmentRentUser", fields: [user_id], references: [id])
 
   @@index([status])
   @@index([table_id])
@@ -927,6 +941,7 @@ model D_Villa_Sale {
   subCategory              SubCategories? @relation(fields: [subCategoryId], references: [id])
   subuser                  Users?         @relation("VillaSaleOwner", fields: [subuser_id], references: [id])
   table                    AllTables      @relation(fields: [table_id], references: [id])
+  user                     Users?         @relation("VillaSaleUser", fields: [user_id], references: [id])
 
   @@index([status])
   @@index([table_id])
@@ -1032,6 +1047,7 @@ model D_Villa_Rent {
   subCategory              SubCategories?              @relation(fields: [subCategoryId], references: [id])
   subuser                  Users?                      @relation("VillaRentOwner", fields: [subuser_id], references: [id])
   table                    AllTables                   @relation(fields: [table_id], references: [id])
+  user                     Users?                      @relation("VillaRentUser", fields: [user_id], references: [id])
 
   @@index([status])
   @@index([table_id])
@@ -1125,6 +1141,7 @@ model D_Commercial_Sale {
   subCategory              SubCategories? @relation(fields: [subCategoryId], references: [id])
   subuser                  Users?         @relation("CommercialSaleOwner", fields: [subuser_id], references: [id])
   table                    AllTables      @relation(fields: [table_id], references: [id])
+  user                     Users?         @relation("CommercialSaleUser", fields: [user_id], references: [id])
 
   @@index([status])
   @@index([table_id])
@@ -1222,6 +1239,7 @@ model D_Commercial_Rent {
   subCategory              SubCategories?              @relation(fields: [subCategoryId], references: [id])
   subuser                  Users?                      @relation("CommercialRentOwner", fields: [subuser_id], references: [id])
   table                    AllTables                   @relation(fields: [table_id], references: [id])
+  user                     Users?                      @relation("CommercialRentUser", fields: [user_id], references: [id])
 
   @@index([status])
   @@index([table_id])
@@ -1318,6 +1336,7 @@ model D_Buildings_And_Lands_Sale {
   subCategory              SubCategories?     @relation(fields: [subCategoryId], references: [id])
   subuser                  Users?             @relation("BuildingsLandsSaleOwner", fields: [subuser_id], references: [id])
   table                    AllTables          @relation(fields: [table_id], references: [id])
+  user                     Users?             @relation("BuildingsLandsSaleUser", fields: [user_id], references: [id])
 
   @@index([status])
   @@index([table_id])
@@ -1418,6 +1437,7 @@ model D_Buildings_And_Lands_Rent {
   subCategory              SubCategories?              @relation(fields: [subCategoryId], references: [id])
   subuser                  Users?                      @relation("BuildingsLandsRentOwner", fields: [subuser_id], references: [id])
   table                    AllTables                   @relation(fields: [table_id], references: [id])
+  user                     Users?                      @relation("BuildingsLandsRentUser", fields: [user_id], references: [id])
 
   @@index([status])
   @@index([table_id])
