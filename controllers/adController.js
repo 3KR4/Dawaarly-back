@@ -500,6 +500,88 @@ const getAvailableAdTables = () =>
     .map((table_id) => ({ table_id, prismaModel: getModel(table_id) }))
     .filter((entry) => entry.prismaModel);
 
+const getMaxPriceFromGroupedCurrencies = (rows = []) =>
+  rows.reduce((max, row) => {
+    const normalizedPrice = toEgp(row?._max?.price || 0, row?.currency);
+    return normalizedPrice > max ? normalizedPrice : max;
+  }, 0);
+
+const getAdsListMeta = async (query, canViewAllStatuses, tableId = null) => {
+  const includeDynamic = Boolean(tableId);
+  const priceWhere = buildAdsWhere(query, canViewAllStatuses, {
+    includeDynamic,
+    skipPriceRange: true,
+  });
+  const areaWhere = buildAdsWhere(query, canViewAllStatuses, {
+    includeDynamic,
+    skipAreaRange: true,
+  });
+
+  if (tableId) {
+    const prismaModel = getModel(tableId);
+
+    if (!prismaModel) {
+      return {
+        max_price: 0,
+        max_area_m2: 0,
+        price_currency: "EGP",
+      };
+    }
+
+    const [priceRows, areaAgg] = await Promise.all([
+      prismaModel.groupBy({
+        by: ["currency"],
+        where: priceWhere,
+        _max: { price: true },
+      }),
+      prismaModel.aggregate({
+        where: areaWhere,
+        _max: { area_m2: true },
+      }),
+    ]);
+
+    return {
+      max_price: getMaxPriceFromGroupedCurrencies(priceRows),
+      max_area_m2: Number(areaAgg?._max?.area_m2 || 0),
+      price_currency: "EGP",
+    };
+  }
+
+  const tables = getAvailableAdTables();
+  const tableMeta = await Promise.all(
+    tables.map(async ({ prismaModel }) => {
+      const [priceRows, areaAgg] = await Promise.all([
+        prismaModel.groupBy({
+          by: ["currency"],
+          where: priceWhere,
+          _max: { price: true },
+        }),
+        prismaModel.aggregate({
+          where: areaWhere,
+          _max: { area_m2: true },
+        }),
+      ]);
+
+      return {
+        maxPrice: getMaxPriceFromGroupedCurrencies(priceRows),
+        maxArea: Number(areaAgg?._max?.area_m2 || 0),
+      };
+    }),
+  );
+
+  return {
+    max_price: tableMeta.reduce(
+      (max, entry) => (entry.maxPrice > max ? entry.maxPrice : max),
+      0,
+    ),
+    max_area_m2: tableMeta.reduce(
+      (max, entry) => (entry.maxArea > max ? entry.maxArea : max),
+      0,
+    ),
+    price_currency: "EGP",
+  };
+};
+
 const sectionFieldByType = {
   gov: "governorate_id",
   governorate: "governorate_id",
@@ -1081,7 +1163,7 @@ exports.getAllAds = async (req, res) => {
         });
       }
 
-      const [ads, total] = await Promise.all([
+      const [ads, total, meta] = await Promise.all([
         prismaModel.findMany({
           where,
           skip,
@@ -1090,6 +1172,7 @@ exports.getAllAds = async (req, res) => {
           include: listIncludeRelations,
         }),
         prismaModel.count({ where }),
+        getAdsListMeta(req.query, canViewAllStatuses, table_id),
       ]);
 
       const data = await enrichAds(ads, userId, enrichMode);
@@ -1103,6 +1186,7 @@ exports.getAllAds = async (req, res) => {
           limit,
           totalPages: Math.ceil(total / limit),
         },
+        meta,
       };
 
       await setCache(cacheKey, response, 60);
@@ -1113,7 +1197,8 @@ exports.getAllAds = async (req, res) => {
     const tables = getAvailableAdTables();
     const takePerTable = skip + limit;
 
-    const tableResults = await Promise.all(
+    const [tableResults, meta] = await Promise.all([
+      Promise.all(
       tables.map(async ({ prismaModel }) => {
         const [records, count] = await Promise.all([
           prismaModel.findMany({
@@ -1127,7 +1212,9 @@ exports.getAllAds = async (req, res) => {
 
         return { records, count };
       }),
-    );
+      ),
+      getAdsListMeta(req.query, canViewAllStatuses),
+    ]);
 
     const total = tableResults.reduce((sum, result) => sum + result.count, 0);
     const ads = tableResults
@@ -1146,6 +1233,7 @@ exports.getAllAds = async (req, res) => {
         limit,
         totalPages: Math.ceil(total / limit),
       },
+      meta,
     };
 
     await setCache(cacheKey, response, 60);
