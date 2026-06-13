@@ -22,5 +22,6 @@ const toEgp = (price, currency) => {
 };
 
 module.exports = {
+  getRateToEgp,
   toEgp,
 };

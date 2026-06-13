@@ -4,6 +4,7 @@ const express = require("express");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
 // require("./jobs/bookingCleanup");
+const { startAdLifecycleMaintenance } = require("./jobs/adLifecycleMaintenance");
 const securityMiddleware = require("./middlewares/security");
 
 const selectedDataRoutes = require("./routes/selectedData");
@@ -54,4 +55,5 @@ const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+  startAdLifecycleMaintenance();
 });

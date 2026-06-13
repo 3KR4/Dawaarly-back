@@ -8,6 +8,18 @@ const { getCache, setCache, deleteCachePattern } = require("../utils/redis");
 const { validateAdDates } = require("../utils/validation");
 const tableRegistry = require("../utils/ads/config/tableRegistry");
 const { toEgp } = require("../utils/currency");
+const {
+  computeLifecycleMeta,
+  ensureLifecycleForActivation,
+  getLifecycleRecord,
+  loadLifecycleMap,
+  requestRenewal,
+  renewAdLifecycle,
+  runAdLifecycleMaintenance,
+} = require("../utils/adLifecycle");
+const {
+  sendAdStatusDecisionEmail,
+} = require("../utils/sendEmail");
 
 const adIncludeRelations = {
   user: {
@@ -165,6 +177,7 @@ async function enrichAds(ads, userId = null, mode = "list") {
   let favorites = [];
   let usersById = {};
   let anonymousById = {};
+  const lifecycleMap = await loadLifecycleMap(ads);
 
   const ownerUserIds = [
     ...new Set(
@@ -326,10 +339,56 @@ async function enrichAds(ads, userId = null, mode = "list") {
         images_count: adImages.length,
       }),
 
+      lifecycle: computeLifecycleMeta(lifecycleMap[key]),
+
       isFavorite: isFav,
     };
   });
 }
+
+const getOwnerEmailForAd = async (ad) => {
+  if (ad?.subuser_id || ad?.user_id) {
+    const owner = await prisma.Users.findUnique({
+      where: { id: ad.subuser_id || ad.user_id },
+      select: { email: true },
+    });
+
+    return owner?.email || null;
+  }
+
+  if (ad?.anonymous_id) {
+    const owner = await prisma.Anonymous.findUnique({
+      where: { id: ad.anonymous_id },
+      select: { email: true },
+    });
+
+    return owner?.email || null;
+  }
+
+  return null;
+};
+
+const isAdOwner = (ad, user) => {
+  if (!ad || !user) return false;
+
+  return [ad.user_id, ad.subuser_id, ad.admin_id].includes(user.id);
+};
+
+const flushAdCaches = async () => {
+  await deleteCachePattern("ads:list:*");
+  await deleteCachePattern("userAds:*");
+  await deleteCachePattern("sections:*");
+};
+
+const runLifecycleMaintenanceAndFlushCaches = async () => {
+  const result = await runAdLifecycleMaintenance();
+
+  if (result.expiredCount > 0) {
+    await flushAdCaches();
+  }
+
+  return result;
+};
 const isDetailedListRequest = (query = {}) => {
   const detailMode = String(query.details_mode || query.detail_mode || "")
     .trim()
@@ -355,12 +414,12 @@ const validateCreateAd = require("../utils/ads/validators/validateCreateAd");
 const getModel = require("../utils/ads/services/getModel");
 const validateUpdateAd = require("../utils/ads/validators/validateUpdateAd");
 
-const getAdsOrderBy = (query) => {
+const getAdsOrderBy = (query, options = {}) => {
   const sort = query.sort || query.sort_by;
   const order = query.order === "asc" ? "asc" : "desc";
-  const hasExplicitSort = Boolean(sort);
+  const { prioritizeFeatured = !sort } = options;
 
-  const orderBy = hasExplicitSort ? [] : [{ featured_priority: "desc" }];
+  const orderBy = prioritizeFeatured ? [{ featured_priority: "desc" }] : [];
 
   if (sort === "top_views" || sort === "views" || sort === "views_desc") {
     orderBy.push({ views_count: "desc" }, { created_at: "desc" });
@@ -379,12 +438,13 @@ const getAdsOrderBy = (query) => {
   return orderBy;
 };
 
-const compareAds = (query) => {
+const compareAds = (query, options = {}) => {
   const sort = query.sort || query.sort_by;
   const order = query.order === "asc" ? "asc" : "desc";
+  const { prioritizeFeatured = !sort } = options;
 
   return (a, b) => {
-    if (!sort) {
+    if (prioritizeFeatured) {
       const priorityDiff =
         Number(b.featured_priority || 0) - Number(a.featured_priority || 0);
       if (priorityDiff !== 0) return priorityDiff;
@@ -500,6 +560,88 @@ const getAvailableAdTables = () =>
     .map((table_id) => ({ table_id, prismaModel: getModel(table_id) }))
     .filter((entry) => entry.prismaModel);
 
+const getMaxPriceFromGroupedCurrencies = (rows = []) =>
+  rows.reduce((max, row) => {
+    const normalizedPrice = toEgp(row?._max?.price || 0, row?.currency);
+    return normalizedPrice > max ? normalizedPrice : max;
+  }, 0);
+
+const getAdsListMeta = async (query, canViewAllStatuses, tableId = null) => {
+  const includeDynamic = Boolean(tableId);
+  const priceWhere = buildAdsWhere(query, canViewAllStatuses, {
+    includeDynamic,
+    skipPriceRange: true,
+  });
+  const areaWhere = buildAdsWhere(query, canViewAllStatuses, {
+    includeDynamic,
+    skipAreaRange: true,
+  });
+
+  if (tableId) {
+    const prismaModel = getModel(tableId);
+
+    if (!prismaModel) {
+      return {
+        max_price: 0,
+        max_area_m2: 0,
+        price_currency: "EGP",
+      };
+    }
+
+    const [priceRows, areaAgg] = await Promise.all([
+      prismaModel.groupBy({
+        by: ["currency"],
+        where: priceWhere,
+        _max: { price: true },
+      }),
+      prismaModel.aggregate({
+        where: areaWhere,
+        _max: { area_m2: true },
+      }),
+    ]);
+
+    return {
+      max_price: getMaxPriceFromGroupedCurrencies(priceRows),
+      max_area_m2: Number(areaAgg?._max?.area_m2 || 0),
+      price_currency: "EGP",
+    };
+  }
+
+  const tables = getAvailableAdTables();
+  const tableMeta = await Promise.all(
+    tables.map(async ({ prismaModel }) => {
+      const [priceRows, areaAgg] = await Promise.all([
+        prismaModel.groupBy({
+          by: ["currency"],
+          where: priceWhere,
+          _max: { price: true },
+        }),
+        prismaModel.aggregate({
+          where: areaWhere,
+          _max: { area_m2: true },
+        }),
+      ]);
+
+      return {
+        maxPrice: getMaxPriceFromGroupedCurrencies(priceRows),
+        maxArea: Number(areaAgg?._max?.area_m2 || 0),
+      };
+    }),
+  );
+
+  return {
+    max_price: tableMeta.reduce(
+      (max, entry) => (entry.maxPrice > max ? entry.maxPrice : max),
+      0,
+    ),
+    max_area_m2: tableMeta.reduce(
+      (max, entry) => (entry.maxArea > max ? entry.maxArea : max),
+      0,
+    ),
+    price_currency: "EGP",
+  };
+};
+
 const sectionFieldByType = {
   gov: "governorate_id",
   governorate: "governorate_id",
@@ -534,8 +676,42 @@ const specificTableSectionTypes = new Set([
 const normalizeBoolean = (value) =>
   value === true || value === "true" || value === 1 || value === "1";
 
+const normalizeTags = (tags) => {
+  if (tags === undefined) return undefined;
+  if (tags === null || tags === "") return JSON.stringify([]);
+
+  if (Array.isArray(tags)) {
+    return JSON.stringify(
+      tags.map((tag) => String(tag).trim()).filter(Boolean),
+    );
+  }
+
+  if (typeof tags === "string") {
+    try {
+      const parsed = JSON.parse(tags);
+
+      if (Array.isArray(parsed)) {
+        return JSON.stringify(
+          parsed.map((tag) => String(tag).trim()).filter(Boolean),
+        );
+      }
+    } catch {}
+
+    return JSON.stringify(
+      tags
+        .split(",")
+        .map((tag) => tag.trim())
+        .filter(Boolean),
+    );
+  }
+
+  return JSON.stringify([]);
+};
+
 exports.createAd = async (req, res) => {
   try {
+    await runLifecycleMaintenanceAndFlushCaches();
+
     const data = req.body;
 
     // =========================
@@ -602,6 +778,10 @@ exports.createAd = async (req, res) => {
       createData.available_to = new Date(data.available_to);
     }
 
+    if (data.tags !== undefined) {
+      createData.tags = normalizeTags(data.tags);
+    }
+
     // =========================
     // CREATE AD
     // =========================
@@ -632,6 +812,8 @@ exports.createAd = async (req, res) => {
 };
 exports.updateAd = async (req, res) => {
   try {
+    await runLifecycleMaintenanceAndFlushCaches();
+
     const adId = Number(req.params.adId);
     const table_id = Number(req.params.table_id);
 
@@ -643,10 +825,6 @@ exports.updateAd = async (req, res) => {
       });
     }
 
-    // =========================
-    // GET AD
-    // =========================
-
     const ad = await prismaModel.findUnique({
       where: { id: adId },
     });
@@ -657,11 +835,7 @@ exports.updateAd = async (req, res) => {
       });
     }
 
-    // =========================
-    // AUTH
-    // =========================
     const user = req.user;
-
     const isAdmin =
       user?.permissions?.includes("EDIT_AD") || user?.is_super_admin;
 
@@ -673,23 +847,16 @@ exports.updateAd = async (req, res) => {
       });
     }
 
-    // =========================
-    // VALIDATION
-    // =========================
     const validation = validateUpdateAd(req.body, table_id);
 
     if (validation.error) {
       return res.status(400).json(validation);
     }
 
-    // =========================
-    // BUILD UPDATE DATA
-    // =========================
     const dataToUpdate = {
       ...req.body,
     };
 
-    // date casting
     if (req.body.available_from) {
       dataToUpdate.available_from = new Date(req.body.available_from);
     }
@@ -698,17 +865,19 @@ exports.updateAd = async (req, res) => {
       dataToUpdate.available_to = new Date(req.body.available_to);
     }
 
+    if (req.body.tags !== undefined) {
+      dataToUpdate.tags = normalizeTags(req.body.tags);
+    }
+
     if (isAdmin && req.body.is_verified !== undefined) {
       dataToUpdate.is_verified = normalizeBoolean(req.body.is_verified);
     }
 
-    // pending after edit
     if (!isAdmin && ad.status === "ACTIVE") {
       dataToUpdate.status = "PENDING";
       dataToUpdate.was_previously_approved = true;
     }
 
-    // prevent changing protected fields
     delete dataToUpdate.id;
     delete dataToUpdate.user_id;
 
@@ -716,24 +885,13 @@ exports.updateAd = async (req, res) => {
       delete dataToUpdate.is_verified;
     }
 
-    // =========================
-    // UPDATE
-    // =========================
     const updatedAd = await prismaModel.update({
       where: { id: adId },
       data: dataToUpdate,
     });
 
-    // =========================
-    // CACHE
-    // =========================
-    await deleteCachePattern("ads:list:*");
-    await deleteCachePattern("userAds:*");
-    await deleteCachePattern("sections:*");
+    await flushAdCaches();
 
-    // =========================
-    // RESPONSE
-    // =========================
     return res.json({
       success: true,
       message: "Ad updated successfully",
@@ -748,8 +906,11 @@ exports.updateAd = async (req, res) => {
     });
   }
 };
+
 exports.deleteAd = async (req, res) => {
   try {
+    await runLifecycleMaintenanceAndFlushCaches();
+
     const adId = Number(req.params.adId);
     const table_id = Number(req.params.table_id);
 
@@ -761,9 +922,6 @@ exports.deleteAd = async (req, res) => {
       });
     }
 
-    // =========================
-    // FIND AD
-    // =========================
     const ad = await prismaModel.findUnique({
       where: { id: adId },
     });
@@ -774,13 +932,8 @@ exports.deleteAd = async (req, res) => {
       });
     }
 
-    // =========================
-    // AUTH
-    // =========================
     const user = req.user;
-
     const isOwner = ad.user_id === user.id;
-
     const canDelete =
       user?.is_super_admin || user?.permissions?.includes("DELETE_AD");
 
@@ -790,9 +943,6 @@ exports.deleteAd = async (req, res) => {
       });
     }
 
-    // =========================
-    // IMAGES
-    // =========================
     const images = await prisma.Images.findMany({
       where: {
         entity_type: "AD",
@@ -805,23 +955,12 @@ exports.deleteAd = async (req, res) => {
       images.map((img) => cloudinary.uploader.destroy(img.public_id)),
     );
 
-    // =========================
-    // DELETE
-    // =========================
     await prismaModel.delete({
       where: { id: adId },
     });
 
-    // =========================
-    // CACHE
-    // =========================
-    await deleteCachePattern("ads:list:*");
-    await deleteCachePattern("userAds:*");
-    await deleteCachePattern("sections:*");
+    await flushAdCaches();
 
-    // =========================
-    // RESPONSE
-    // =========================
     return res.json({
       success: true,
       message: "Ad deleted successfully",
@@ -835,11 +974,13 @@ exports.deleteAd = async (req, res) => {
     });
   }
 };
+
 exports.changeAdStatus = async (req, res) => {
   try {
+    await runLifecycleMaintenanceAndFlushCaches();
+
     const table_id = Number(req.params.table_id);
     const adId = Number(req.params.adId);
-
     const { status, reason } = req.body;
 
     const prismaModel = getModel(table_id);
@@ -850,9 +991,6 @@ exports.changeAdStatus = async (req, res) => {
       });
     }
 
-    // =========================
-    // GET AD
-    // =========================
     const ad = await prismaModel.findUnique({
       where: { id: adId },
     });
@@ -861,27 +999,17 @@ exports.changeAdStatus = async (req, res) => {
       return res.status(404).json({ message: "Ad not found" });
     }
 
-    // =========================
-    // AUTH
-    // =========================
     const isAdmin =
       req.user?.is_super_admin ||
       req.user?.permissions?.includes("CHANGE_ADS_STATUS");
 
-    const isOwner = ad.user_id === req.user.id;
-
-    // =========================
-    // VALID STATUS
-    // =========================
+    const isOwner = isAdOwner(ad, req.user);
     const allowedStatuses = ["ACTIVE", "REJECTED", "DISABLED"];
 
     if (!allowedStatuses.includes(status)) {
       return res.status(400).json({ message: "Invalid status" });
     }
 
-    // =========================
-    // AUTH RULES
-    // =========================
     if (!isAdmin) {
       if (!isOwner) {
         return res.status(403).json({ message: "Access denied" });
@@ -894,9 +1022,6 @@ exports.changeAdStatus = async (req, res) => {
       }
     }
 
-    // =========================
-    // REJECT LOGIC
-    // =========================
     let reject_reason;
 
     if (status === "REJECTED") {
@@ -915,29 +1040,46 @@ exports.changeAdStatus = async (req, res) => {
       reject_reason = reason;
     }
 
-    // =========================
-    // UPDATE
-    // =========================
+    const shouldResetLifecycleOnActivation =
+      status === "ACTIVE" && Boolean(ad.was_previously_approved);
+
     const updatedAd = await prismaModel.update({
       where: { id: adId },
       data: {
         status,
         status_changed_at: new Date(),
-
+        ...(status === "ACTIVE" && { was_previously_approved: false }),
         ...(reject_reason && {
           reject_reason,
         }),
       },
     });
 
-    await deleteCachePattern("ads:list:*");
-    await deleteCachePattern("userAds:*");
-    await deleteCachePattern("sections:*");
+    if (status === "ACTIVE") {
+      await ensureLifecycleForActivation(table_id, updatedAd, new Date());
+    }
+
+    const ownerEmail = await getOwnerEmailForAd(updatedAd);
+
+    if (ownerEmail && ["ACTIVE", "REJECTED"].includes(status)) {
+      await sendAdStatusDecisionEmail({
+        to: ownerEmail,
+        adTitle: updatedAd.title,
+        status,
+        reason: reject_reason,
+        changedAt: updatedAd.status_changed_at,
+      });
+    }
+
+    await flushAdCaches();
 
     return res.json({
       success: true,
       message: `Ad status updated to ${status}`,
-      data: updatedAd,
+      data: {
+        ...updatedAd,
+        lifecycle_reset_to_30_days: shouldResetLifecycleOnActivation,
+      },
     });
   } catch (err) {
     return res.status(500).json({
@@ -946,8 +1088,190 @@ exports.changeAdStatus = async (req, res) => {
     });
   }
 };
+
+exports.requestAdRenewal = async (req, res) => {
+  try {
+    await runLifecycleMaintenanceAndFlushCaches();
+
+    const table_id = Number(req.params.table_id);
+    const adId = Number(req.params.adId);
+    const prismaModel = getModel(table_id);
+
+    if (!prismaModel) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid table_id",
+      });
+    }
+
+    const ad = await prismaModel.findUnique({
+      where: { id: adId },
+    });
+
+    if (!ad) {
+      return res.status(404).json({
+        success: false,
+        message: "Ad not found",
+      });
+    }
+
+    let requesterType = null;
+    let requesterId = null;
+
+    if (req.user) {
+      if (!isAdOwner(ad, req.user)) {
+        return res.status(403).json({
+          success: false,
+          message: "Access denied",
+        });
+      }
+
+      if (ad.subuser_id === req.user.id) {
+        requesterType = "SUBUSER";
+        requesterId = req.user.id;
+      } else {
+        requesterType = "USER";
+        requesterId = req.user.id;
+      }
+    } else {
+      const token = String(req.query.token || req.body?.token || "").trim();
+
+      if (!token) {
+        return res.status(401).json({
+          success: false,
+          message: "Renewal token is required",
+        });
+      }
+
+      const lifecycle = await getLifecycleRecord(table_id, adId);
+
+      if (!lifecycle || lifecycle.renewal_request_token !== token) {
+        return res.status(403).json({
+          success: false,
+          message: "Invalid renewal token",
+        });
+      }
+
+      requesterType = "ANONYMOUS";
+      requesterId = ad.anonymous_id || null;
+    }
+
+    await requestRenewal({
+      tableId: table_id,
+      ad,
+      requesterType,
+      requesterId,
+    });
+
+    await flushAdCaches();
+
+    if (req.method === "GET") {
+      return res.send(`
+        <!DOCTYPE html>
+        <html>
+          <head><meta charset="UTF-8"><title>Renewal Request Sent</title></head>
+          <body style="font-family: Arial, sans-serif; padding: 32px; text-align: center;">
+            <h1>Renewal request sent</h1>
+            <p>Your request has been sent to the Dawaarly admin team.</p>
+          </body>
+        </html>
+      `);
+    }
+
+    return res.json({
+      success: true,
+      message: "Renewal request sent successfully",
+    });
+  } catch (err) {
+    if (req.method === "GET") {
+      return res.status(400).send(`
+        <!DOCTYPE html>
+        <html>
+          <head><meta charset="UTF-8"><title>Renewal Request Failed</title></head>
+          <body style="font-family: Arial, sans-serif; padding: 32px; text-align: center;">
+            <h1>Could not send renewal request</h1>
+            <p>${err.message}</p>
+          </body>
+        </html>
+      `);
+    }
+
+    return res.status(400).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};
+exports.renewAdActiveTime = async (req, res) => {
+  try {
+    await runLifecycleMaintenanceAndFlushCaches();
+
+    const table_id = Number(req.params.table_id);
+    const adId = Number(req.params.adId);
+    const prismaModel = getModel(table_id);
+
+    if (!prismaModel) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid table_id",
+      });
+    }
+
+    const isAdmin =
+      req.user?.is_super_admin ||
+      req.user?.permissions?.includes("CHANGE_ADS_STATUS") ||
+      req.user?.permissions?.includes("CREATE_AD");
+
+    if (!isAdmin) {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied",
+      });
+    }
+
+    const ad = await prismaModel.findUnique({
+      where: { id: adId },
+    });
+
+    if (!ad) {
+      return res.status(404).json({
+        success: false,
+        message: "Ad not found",
+      });
+    }
+
+    const lifecycle = await renewAdLifecycle(table_id, ad);
+
+    if (ad.status === "EXPIRED") {
+      await prismaModel.update({
+        where: { id: adId },
+        data: {
+          status: "ACTIVE",
+          status_changed_at: new Date(),
+        },
+      });
+    }
+
+    await flushAdCaches();
+
+    return res.json({
+      success: true,
+      message: "Ad active time renewed successfully",
+      data: {
+        expires_at: lifecycle.expires_at,
+      },
+    });
+  } catch (err) {
+    return res.status(400).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};
 exports.assignAdmin = async (req, res) => {
   try {
+    await runLifecycleMaintenanceAndFlushCaches();
+
     const table_id = Number(req.params.table_id);
     const adId = Number(req.params.adId);
 
@@ -1037,6 +1361,8 @@ exports.assignAdmin = async (req, res) => {
 };
 exports.getAllAds = async (req, res) => {
   try {
+    await runLifecycleMaintenanceAndFlushCaches();
+
     const userId = req.user?.id || null;
 
     const { page, limit, skip } = pagination(req.query);
@@ -1055,7 +1381,8 @@ exports.getAllAds = async (req, res) => {
     const where = buildAdsWhere(req.query, canViewAllStatuses, {
       includeDynamic: Boolean(table_id),
     });
-    const orderBy = getAdsOrderBy(req.query);
+    const prioritizeFeatured = !isDashboardRequest;
+    const orderBy = getAdsOrderBy(req.query, { prioritizeFeatured });
     const enrichMode = getListEnrichMode(req.query);
     const listIncludeRelations = getListIncludeRelations(req.query);
 
@@ -1081,7 +1408,7 @@ exports.getAllAds = async (req, res) => {
         });
       }
 
-      const [ads, total] = await Promise.all([
+      const [ads, total, meta] = await Promise.all([
         prismaModel.findMany({
           where,
           skip,
@@ -1090,6 +1417,7 @@ exports.getAllAds = async (req, res) => {
           include: listIncludeRelations,
         }),
         prismaModel.count({ where }),
+        getAdsListMeta(req.query, canViewAllStatuses, table_id),
       ]);
 
       const data = await enrichAds(ads, userId, enrichMode);
@@ -1103,6 +1431,7 @@ exports.getAllAds = async (req, res) => {
           limit,
           totalPages: Math.ceil(total / limit),
         },
+        meta,
       };
 
       await setCache(cacheKey, response, 60);
@@ -1113,7 +1442,8 @@ exports.getAllAds = async (req, res) => {
     const tables = getAvailableAdTables();
     const takePerTable = skip + limit;
 
-    const tableResults = await Promise.all(
+    const [tableResults, meta] = await Promise.all([
+      Promise.all(
       tables.map(async ({ prismaModel }) => {
         const [records, count] = await Promise.all([
           prismaModel.findMany({
@@ -1127,12 +1457,14 @@ exports.getAllAds = async (req, res) => {
 
         return { records, count };
       }),
-    );
+      ),
+      getAdsListMeta(req.query, canViewAllStatuses),
+    ]);
 
     const total = tableResults.reduce((sum, result) => sum + result.count, 0);
     const ads = tableResults
       .flatMap((result) => result.records)
-      .sort(compareAds(req.query))
+      .sort(compareAds(req.query, { prioritizeFeatured }))
       .slice(skip, skip + limit);
 
     const data = await enrichAds(ads, userId, enrichMode);
@@ -1146,6 +1478,7 @@ exports.getAllAds = async (req, res) => {
         limit,
         totalPages: Math.ceil(total / limit),
       },
+      meta,
     };
 
     await setCache(cacheKey, response, 60);
@@ -1157,6 +1490,8 @@ exports.getAllAds = async (req, res) => {
 };
 exports.getAd = async (req, res) => {
   try {
+    await runLifecycleMaintenanceAndFlushCaches();
+
     const table_id = Number(req.params.table_id);
     const adId = Number(req.params.adId);
     const prismaModel = getModel(table_id);
@@ -1174,6 +1509,17 @@ exports.getAd = async (req, res) => {
     });
 
     if (!ad) {
+      return res.status(404).json({
+        success: false,
+        message: "Ad not found",
+      });
+    }
+
+    const isAdmin =
+      req.user?.is_super_admin || req.user?.user_type === "ADMIN";
+    const isOwner = isAdOwner(ad, req.user);
+
+    if (ad.status !== "ACTIVE" && !isAdmin && !isOwner) {
       return res.status(404).json({
         success: false,
         message: "Ad not found",
@@ -1201,6 +1547,8 @@ exports.getAd = async (req, res) => {
 };
 exports.getUserAds = async (req, res) => {
   try {
+    await runLifecycleMaintenanceAndFlushCaches();
+
     const userId = Number(req.params.userId);
     const { page, limit, skip } = pagination(req.query);
     const viewerId = req.user?.id || null;
@@ -1349,6 +1697,8 @@ exports.getUserAds = async (req, res) => {
 };
 exports.getSectionsAds = async (req, res) => {
   try {
+    await runLifecycleMaintenanceAndFlushCaches();
+
     const { type, value } = req.query;
     const typeKey = String(type || "").trim();
     const normalizedType = typeKey.toLowerCase();
@@ -1760,3 +2110,5 @@ exports.getFavorites = async (req, res) => {
     });
   }
 };
+
+

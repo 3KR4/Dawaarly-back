@@ -264,3 +264,214 @@ exports.sendAdStatusDecisionEmail = async ({
 
   return data;
 };
+
+exports.sendAdExpiryWarningEmail = async ({
+  to,
+  adTitle,
+  expiresAt,
+  daysLeft = 3,
+  renewalUrl,
+}) => {
+  if (!process.env.RESEND_API_KEY) {
+    throw new Error("RESEND_API_KEY is not configured");
+  }
+
+  const safeTitle = adTitle || "Your ad";
+  const expiresAtText = new Date(expiresAt).toLocaleString("en-GB", {
+    timeZone: "Africa/Cairo",
+  });
+
+  const { data, error } = await resend.emails.send({
+    from: `"Dawaarly" <${fromEmail}>`,
+    to,
+    subject: `Your ad will expire in ${daysLeft} day${daysLeft === 1 ? "" : "s"}`,
+    html: `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8" />
+        <title>Ad expiration warning</title>
+      </head>
+      <body style="margin:0; padding:0; font-family: Arial, sans-serif; background-color:#f4f4f4;">
+        <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f4; padding:20px;">
+          <tr>
+            <td align="center">
+              <table width="520" cellpadding="0" cellspacing="0" style="background:#ffffff; border-radius:12px; overflow:hidden;">
+                <tr>
+                  <td align="center" style="padding:18px; background:#fafafa;">
+                    <img src="https://www.dawaarly.com/logo.png" alt="Dawaarly" width="110" style="display:block;" />
+                    <h2 style="margin:14px 0 0; color:#333;">Ad expiration warning</h2>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:22px; text-align:center;">
+                    <p style="font-size:16px; color:#333; margin:0 0 10px;">
+                      Your ad <strong>${safeTitle}</strong> will expire in ${daysLeft} day${daysLeft === 1 ? "" : "s"}.
+                    </p>
+                    <p style="font-size:14px; color:#666; margin:0 0 20px;">
+                      Expiration date: ${expiresAtText}
+                    </p>
+                    ${
+                      renewalUrl
+                        ? `<a href="${renewalUrl}" style="display:inline-block; background:#8f59f2; color:#fff; text-decoration:none; padding:12px 22px; border-radius:8px; font-weight:bold;">Request renewal</a>`
+                        : ""
+                    }
+                  </td>
+                </tr>
+                <tr>
+                  <td style="background:#fafafa; padding:16px; text-align:center; font-size:12px; color:#999;">
+                    Dawaarly notification
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+      </body>
+      </html>
+    `,
+  });
+
+  if (error) {
+    throw new Error(error.message || "Failed to send ad expiry warning email");
+  }
+
+  return data;
+};
+
+exports.sendAdRenewalRequestEmail = async ({
+  to,
+  adTitle,
+  ownerName,
+  ownerType,
+  ownerEmail,
+  ownerPhone,
+  dashboardUrl,
+}) => {
+  if (!process.env.RESEND_API_KEY) {
+    throw new Error("RESEND_API_KEY is not configured");
+  }
+
+  const { data, error } = await resend.emails.send({
+    from: `"Dawaarly" <${fromEmail}>`,
+    to,
+    subject: "Ad renewal request",
+    html: `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8" />
+        <title>Ad renewal request</title>
+      </head>
+      <body style="margin:0; padding:0; font-family: Arial, sans-serif; background-color:#f4f4f4;">
+        <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f4; padding:20px;">
+          <tr>
+            <td align="center">
+              <table width="520" cellpadding="0" cellspacing="0" style="background:#ffffff; border-radius:12px; overflow:hidden;">
+                <tr>
+                  <td align="center" style="padding:18px; background:#fafafa;">
+                    <img src="https://www.dawaarly.com/logo.png" alt="Dawaarly" width="110" style="display:block;" />
+                    <h2 style="margin:14px 0 0; color:#333;">Ad renewal request</h2>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:22px;">
+                    <p style="font-size:16px; color:#333; margin:0 0 14px;">
+                      ${ownerName || "A client"} requested renewal for <strong>${adTitle || "an ad"}</strong>.
+                    </p>
+                    <p style="font-size:14px; color:#666; margin:0 0 8px;">Owner type: ${ownerType || "-"}</p>
+                    <p style="font-size:14px; color:#666; margin:0 0 8px;">Email: ${ownerEmail || "-"}</p>
+                    <p style="font-size:14px; color:#666; margin:0 0 20px;">Phone: ${ownerPhone || "-"}</p>
+                    ${
+                      dashboardUrl
+                        ? `<a href="${dashboardUrl}" style="display:inline-block; background:#8f59f2; color:#fff; text-decoration:none; padding:12px 22px; border-radius:8px; font-weight:bold;">Open ad in dashboard</a>`
+                        : ""
+                    }
+                  </td>
+                </tr>
+                <tr>
+                  <td style="background:#fafafa; padding:16px; text-align:center; font-size:12px; color:#999;">
+                    Dawaarly admin notification
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+      </body>
+      </html>
+    `,
+  });
+
+  if (error) {
+    throw new Error(error.message || "Failed to send ad renewal request email");
+  }
+
+  return data;
+};
+
+exports.sendAdRenewedEmail = async ({
+  to,
+  adTitle,
+  expiresAt,
+}) => {
+  if (!process.env.RESEND_API_KEY) {
+    throw new Error("RESEND_API_KEY is not configured");
+  }
+
+  const expiresAtText = new Date(expiresAt).toLocaleString("en-GB", {
+    timeZone: "Africa/Cairo",
+  });
+
+  const { data, error } = await resend.emails.send({
+    from: `"Dawaarly" <${fromEmail}>`,
+    to,
+    subject: "Your ad active time has been renewed",
+    html: `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8" />
+        <title>Ad renewed</title>
+      </head>
+      <body style="margin:0; padding:0; font-family: Arial, sans-serif; background-color:#f4f4f4;">
+        <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f4; padding:20px;">
+          <tr>
+            <td align="center">
+              <table width="520" cellpadding="0" cellspacing="0" style="background:#ffffff; border-radius:12px; overflow:hidden;">
+                <tr>
+                  <td align="center" style="padding:18px; background:#fafafa;">
+                    <img src="https://www.dawaarly.com/logo.png" alt="Dawaarly" width="110" style="display:block;" />
+                    <h2 style="margin:14px 0 0; color:#333;">Ad renewed successfully</h2>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:22px; text-align:center;">
+                    <p style="font-size:16px; color:#333; margin:0 0 10px;">
+                      Your ad <strong>${adTitle || "Your ad"}</strong> has been renewed by the admin.
+                    </p>
+                    <p style="font-size:14px; color:#666; margin:0;">
+                      New expiration date: ${expiresAtText}
+                    </p>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="background:#fafafa; padding:16px; text-align:center; font-size:12px; color:#999;">
+                    Dawaarly notification
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+      </body>
+      </html>
+    `,
+  });
+
+  if (error) {
+    throw new Error(error.message || "Failed to send ad renewed email");
+  }
+
+  return data;
+};

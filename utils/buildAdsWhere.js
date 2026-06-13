@@ -1,4 +1,5 @@
 const tableRules = require("./ads/config/tableRules");
+const { getRateToEgp } = require("./currency");
 
 const isFilled = (value) => value !== undefined && value !== null && value !== "";
 
@@ -17,12 +18,45 @@ const addRange = (filters, field, min, max) => {
   filters.push({ [field]: range });
 };
 
+const addPriceRange = (filters, min, max, currency) => {
+  if (!isFilled(min) && !isFilled(max)) return;
+
+  const minValue = isFilled(min) ? toNumber(min) : null;
+  const maxValue = isFilled(max) ? toNumber(max) : null;
+  const currencies = isFilled(currency)
+    ? [String(currency).trim().toUpperCase()]
+    : ["EGP", "USD", "EUR", "SAR", "AED"];
+
+  const priceFilters = currencies.map((currencyCode) => {
+    const rate = getRateToEgp(currencyCode) || 1;
+    const range = {};
+
+    if (minValue !== null) range.gte = minValue / rate;
+    if (maxValue !== null) range.lte = maxValue / rate;
+
+    return {
+      currency: currencyCode,
+      price: range,
+    };
+  });
+
+  filters.push(
+    priceFilters.length === 1 ? priceFilters[0] : { OR: priceFilters },
+  );
+};
+
 const addExactNumber = (filters, field, value) => {
   if (isFilled(value)) filters.push({ [field]: toNumber(value) });
 };
 
 const addExactString = (filters, field, value) => {
   if (isFilled(value)) filters.push({ [field]: String(value).trim() });
+};
+
+const addExactCurrency = (filters, value) => {
+  if (isFilled(value)) {
+    filters.push({ currency: String(value).trim().toUpperCase() });
+  }
 };
 
 const addNotString = (filters, field, value) => {
@@ -119,11 +153,11 @@ const buildAdsWhere = (query, isAdmin, options = {}) => {
   addExactNumber(filters, "city_id", query.city_id);
   addExactNumber(filters, "area_id", query.area_id);
   addExactNumber(filters, "compound_id", query.compound_id);
-  addExactString(filters, "currency", query.currency);
+  addExactCurrency(filters, query.currency);
   addOwnerFilter(filters, query);
 
   if (!options.skipPriceRange) {
-    addRange(filters, "price", query.min_price, query.max_price);
+    addPriceRange(filters, query.min_price, query.max_price, query.currency);
   }
   addBoolean(filters, "is_verified", query.is_verified || query.is_verified_only);
 
