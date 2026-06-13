@@ -132,6 +132,7 @@ model AllTables {
   slug                       String                       @unique
   created_at                 DateTime                     @default(now())
   order                      Int                          @default(10000)
+  ad_lifecycles              AdLifecycle[]
   favorites                  AdFavorite[]
   reaches                    AdReach[]
   bookings                   Booking[]
@@ -146,6 +147,29 @@ model AllTables {
   D_Vacation_Sale            D_Vacation_Sale[]
   D_Villa_Rent               D_Villa_Rent[]
   D_Villa_Sale               D_Villa_Sale[]
+}
+
+model AdLifecycle {
+  id                           Int                  @id @default(autoincrement())
+  table_id                     Int
+  entity_id                    Int
+  activated_at                 DateTime
+  expires_at                   DateTime
+  expiry_warning_sent_at       DateTime?
+  renewal_requested_at         DateTime?
+  renewal_request_token        String?              @unique
+  renewal_requester_type       RenewalRequesterType?
+  renewal_requester_id         Int?
+  renewal_last_notified_at     DateTime?
+  renewed_at                   DateTime?
+  created_at                   DateTime             @default(now())
+  updated_at                   DateTime             @updatedAt
+  table                        AllTables            @relation(fields: [table_id], references: [id], onDelete: Cascade)
+
+  @@unique([table_id, entity_id])
+  @@index([expires_at])
+  @@index([renewal_requested_at])
+  @@index([table_id])
 }
 
 model Categories {
@@ -1494,8 +1518,15 @@ enum PaymentMethod {
 enum AdStatus {
   PENDING
   ACTIVE
+  EXPIRED
   REJECTED
   DISABLED
+}
+
+enum RenewalRequesterType {
+  USER
+  SUBUSER
+  ANONYMOUS
 }
 
 enum BookingStatus {
